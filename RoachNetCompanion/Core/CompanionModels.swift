@@ -78,18 +78,18 @@ extension KeyedDecodingContainer {
     }
 }
 
-struct APIErrorEnvelope: Decodable, Sendable {
+struct APIErrorEnvelope: Codable, Sendable {
     let error: String
 }
 
-struct CompanionIssue: Decodable, Identifiable, Hashable, Sendable {
+struct CompanionIssue: Codable, Identifiable, Hashable, Sendable {
     let path: String
     let error: String
 
     var id: String { "\(path)-\(error)" }
 }
 
-struct CompanionChatMessage: Decodable, Identifiable, Hashable, Sendable {
+struct CompanionChatMessage: Codable, Identifiable, Hashable, Sendable {
     let rawID: FlexibleIdentifier
     let role: String
     let content: String
@@ -120,9 +120,17 @@ struct CompanionChatMessage: Decodable, Identifiable, Hashable, Sendable {
         self.content = content
         self.createdAt = createdAt
     }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(rawID, forKey: .id)
+        try container.encode(role, forKey: .role)
+        try container.encode(content, forKey: .content)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
+    }
 }
 
-struct CompanionChatSessionSummary: Decodable, Identifiable, Hashable, Sendable {
+struct CompanionChatSessionSummary: Codable, Identifiable, Hashable, Sendable {
     let rawID: FlexibleIdentifier
     let title: String
     let model: String?
@@ -151,9 +159,17 @@ struct CompanionChatSessionSummary: Decodable, Identifiable, Hashable, Sendable 
         self.model = model
         self.timestamp = timestamp
     }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(rawID, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(model, forKey: .model)
+        try container.encodeIfPresent(timestamp, forKey: .timestamp)
+    }
 }
 
-struct CompanionChatSessionDetail: Decodable, Identifiable, Hashable, Sendable {
+struct CompanionChatSessionDetail: Codable, Identifiable, Hashable, Sendable {
     let rawID: FlexibleIdentifier
     let title: String
     let model: String?
@@ -192,15 +208,24 @@ struct CompanionChatSessionDetail: Decodable, Identifiable, Hashable, Sendable {
         self.timestamp = timestamp
         self.messages = messages
     }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(rawID, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(model, forKey: .model)
+        try container.encodeIfPresent(timestamp, forKey: .timestamp)
+        try container.encode(messages, forKey: .messages)
+    }
 }
 
-struct CompanionSendMessageResponse: Decodable, Sendable {
+struct CompanionSendMessageResponse: Codable, Sendable {
     let session: CompanionChatSessionSummary
     let userMessage: CompanionChatMessage
     let assistantMessage: CompanionChatMessage
 }
 
-struct CompanionProviderStatus: Decodable, Hashable, Sendable {
+struct CompanionProviderStatus: Codable, Hashable, Sendable {
     let provider: String?
     let available: Bool?
     let source: String?
@@ -208,11 +233,11 @@ struct CompanionProviderStatus: Decodable, Hashable, Sendable {
     let error: String?
 }
 
-struct CompanionProviderEnvelope: Decodable, Hashable, Sendable {
+struct CompanionProviderEnvelope: Codable, Hashable, Sendable {
     let providers: [String: CompanionProviderStatus]
 }
 
-struct CompanionRoachClawStatus: Decodable, Hashable, Sendable {
+struct CompanionRoachClawStatus: Codable, Hashable, Sendable {
     let label: String
     let ready: Bool?
     let error: String?
@@ -223,7 +248,130 @@ struct CompanionRoachClawStatus: Decodable, Hashable, Sendable {
     let openclaw: CompanionProviderStatus?
 }
 
-struct CompanionService: Decodable, Identifiable, Hashable, Sendable {
+struct CompanionRoachTailPeer: Codable, Identifiable, Hashable, Sendable {
+    let id: String
+    let name: String
+    let platform: String
+    let status: String
+    let endpoint: String?
+    let lastSeenAt: Date?
+    let allowsExitNode: Bool?
+    let tags: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case platform
+        case status
+        case endpoint
+        case lastSeenAt
+        case allowsExitNode
+        case tags
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        name = (try? container.decode(String.self, forKey: .name)) ?? "Linked device"
+        platform = (try? container.decode(String.self, forKey: .platform)) ?? "device"
+        status = (try? container.decode(String.self, forKey: .status)) ?? "linked"
+        endpoint = try? container.decodeIfPresent(String.self, forKey: .endpoint)
+        lastSeenAt = container.decodeLossyDateIfPresent(forKey: .lastSeenAt)
+        allowsExitNode = try? container.decodeIfPresent(Bool.self, forKey: .allowsExitNode)
+        tags = (try? container.decode([String].self, forKey: .tags)) ?? []
+    }
+
+    init(
+        id: String,
+        name: String,
+        platform: String,
+        status: String,
+        endpoint: String?,
+        lastSeenAt: Date?,
+        allowsExitNode: Bool?,
+        tags: [String]
+    ) {
+        self.id = id
+        self.name = name
+        self.platform = platform
+        self.status = status
+        self.endpoint = endpoint
+        self.lastSeenAt = lastSeenAt
+        self.allowsExitNode = allowsExitNode
+        self.tags = tags
+    }
+}
+
+struct CompanionRoachTailStatus: Codable, Hashable, Sendable {
+    let enabled: Bool
+    let networkName: String
+    let deviceName: String
+    let deviceId: String
+    let status: String
+    let relayHost: String?
+    let advertisedUrl: String?
+    let joinCode: String?
+    let lastUpdatedAt: Date?
+    let notes: [String]
+    let peers: [CompanionRoachTailPeer]
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case networkName
+        case deviceName
+        case deviceId
+        case status
+        case relayHost
+        case advertisedUrl
+        case joinCode
+        case lastUpdatedAt
+        case notes
+        case peers
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = (try? container.decode(Bool.self, forKey: .enabled)) ?? false
+        networkName = (try? container.decode(String.self, forKey: .networkName)) ?? "RoachTail"
+        deviceName = (try? container.decode(String.self, forKey: .deviceName)) ?? "RoachNet device"
+        deviceId = (try? container.decode(String.self, forKey: .deviceId)) ?? UUID().uuidString
+        status = (try? container.decode(String.self, forKey: .status)) ?? "local-only"
+        relayHost = try? container.decodeIfPresent(String.self, forKey: .relayHost)
+        advertisedUrl = try? container.decodeIfPresent(String.self, forKey: .advertisedUrl)
+        joinCode = try? container.decodeIfPresent(String.self, forKey: .joinCode)
+        lastUpdatedAt = container.decodeLossyDateIfPresent(forKey: .lastUpdatedAt)
+        notes = (try? container.decode([String].self, forKey: .notes)) ?? []
+        peers = (try? container.decode([CompanionRoachTailPeer].self, forKey: .peers)) ?? []
+    }
+
+    init(
+        enabled: Bool,
+        networkName: String,
+        deviceName: String,
+        deviceId: String,
+        status: String,
+        relayHost: String?,
+        advertisedUrl: String?,
+        joinCode: String?,
+        lastUpdatedAt: Date?,
+        notes: [String],
+        peers: [CompanionRoachTailPeer]
+    ) {
+        self.enabled = enabled
+        self.networkName = networkName
+        self.deviceName = deviceName
+        self.deviceId = deviceId
+        self.status = status
+        self.relayHost = relayHost
+        self.advertisedUrl = advertisedUrl
+        self.joinCode = joinCode
+        self.lastUpdatedAt = lastUpdatedAt
+        self.notes = notes
+        self.peers = peers
+    }
+}
+
+struct CompanionService: Codable, Identifiable, Hashable, Sendable {
     let serviceName: String
     let friendlyName: String?
     let status: String?
@@ -232,7 +380,7 @@ struct CompanionService: Decodable, Identifiable, Hashable, Sendable {
     var id: String { serviceName }
 }
 
-struct CompanionDownloadJob: Decodable, Identifiable, Hashable, Sendable {
+struct CompanionDownloadJob: Codable, Identifiable, Hashable, Sendable {
     let jobId: String
     let progress: Int?
     let status: String?
@@ -241,19 +389,28 @@ struct CompanionDownloadJob: Decodable, Identifiable, Hashable, Sendable {
     var id: String { jobId }
 }
 
-struct CompanionInstalledModel: Decodable, Identifiable, Hashable, Sendable {
+struct CompanionInstalledModel: Codable, Identifiable, Hashable, Sendable {
     let name: String
     let size: Int64?
 
     var id: String { name }
 }
 
-struct CompanionActionResponse: Decodable, Hashable, Sendable {
+struct CompanionActionResponse: Codable, Hashable, Sendable {
     let success: Bool?
     let message: String?
 }
 
-struct CompanionHardwareProfile: Decodable, Hashable, Sendable {
+struct CompanionRoachTailPairResponse: Codable, Hashable, Sendable {
+    let success: Bool?
+    let message: String?
+    let token: String
+    let peerId: String
+    let bridgeUrl: String?
+    let state: CompanionRoachTailStatus?
+}
+
+struct CompanionHardwareProfile: Codable, Hashable, Sendable {
     let platformLabel: String?
     let chipFamily: String?
     let recommendedModelClass: String?
@@ -261,35 +418,36 @@ struct CompanionHardwareProfile: Decodable, Hashable, Sendable {
     let warnings: [String]?
 }
 
-struct CompanionMemoryInfo: Decodable, Hashable, Sendable {
+struct CompanionMemoryInfo: Codable, Hashable, Sendable {
     let total: UInt64
     let available: UInt64?
     let swapused: Double?
 }
 
-struct CompanionOSInfo: Decodable, Hashable, Sendable {
+struct CompanionOSInfo: Codable, Hashable, Sendable {
     let hostname: String?
     let arch: String?
     let distro: String?
 }
 
-struct CompanionSystemInfo: Decodable, Hashable, Sendable {
+struct CompanionSystemInfo: Codable, Hashable, Sendable {
     let mem: CompanionMemoryInfo?
     let os: CompanionOSInfo?
     let hardwareProfile: CompanionHardwareProfile?
 }
 
-struct CompanionRuntimeSummary: Decodable, Hashable, Sendable {
+struct CompanionRuntimeSummary: Codable, Hashable, Sendable {
     let systemInfo: CompanionSystemInfo?
     let providers: CompanionProviderEnvelope
     let roachClaw: CompanionRoachClawStatus
+    let roachTail: CompanionRoachTailStatus?
     let services: [CompanionService]
     let downloads: [CompanionDownloadJob]
     let installedModels: [CompanionInstalledModel]
     let issues: [CompanionIssue]
 }
 
-struct CompanionSiteArchive: Decodable, Identifiable, Hashable, Sendable {
+struct CompanionSiteArchive: Codable, Identifiable, Hashable, Sendable {
     let slug: String
     let title: String?
     let sourceUrl: String?
@@ -320,9 +478,27 @@ struct CompanionSiteArchive: Decodable, Identifiable, Hashable, Sendable {
         status = try? container.decodeIfPresent(String.self, forKey: .status)
         note = try? container.decodeIfPresent(String.self, forKey: .note)
     }
+
+    init(
+        slug: String,
+        title: String?,
+        sourceUrl: String?,
+        entryUrl: String?,
+        createdAt: Date?,
+        status: String?,
+        note: String?
+    ) {
+        self.slug = slug
+        self.title = title
+        self.sourceUrl = sourceUrl
+        self.entryUrl = entryUrl
+        self.createdAt = createdAt
+        self.status = status
+        self.note = note
+    }
 }
 
-struct RoachBrainMemorySummary: Decodable, Identifiable, Hashable, Sendable {
+struct RoachBrainMemorySummary: Codable, Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let summary: String
@@ -351,16 +527,34 @@ struct RoachBrainMemorySummary: Decodable, Identifiable, Hashable, Sendable {
         pinned = (try? container.decode(Bool.self, forKey: .pinned)) ?? false
         lastAccessedAt = container.decodeLossyDateIfPresent(forKey: .lastAccessedAt)
     }
+
+    init(
+        id: String,
+        title: String,
+        summary: String,
+        source: String,
+        tags: [String],
+        pinned: Bool,
+        lastAccessedAt: Date?
+    ) {
+        self.id = id
+        self.title = title
+        self.summary = summary
+        self.source = source
+        self.tags = tags
+        self.pinned = pinned
+        self.lastAccessedAt = lastAccessedAt
+    }
 }
 
-struct CompanionVaultSummary: Decodable, Hashable, Sendable {
+struct CompanionVaultSummary: Codable, Hashable, Sendable {
     let knowledgeFiles: [String]
     let siteArchives: [CompanionSiteArchive]
     let roachBrain: [RoachBrainMemorySummary]
     let issues: [CompanionIssue]
 }
 
-struct CompanionBootstrapResponse: Decodable, Sendable {
+struct CompanionBootstrapResponse: Codable, Sendable {
     let appName: String
     let machineName: String
     let appsCatalogUrl: String
@@ -369,7 +563,7 @@ struct CompanionBootstrapResponse: Decodable, Sendable {
     let sessions: [CompanionChatSessionSummary]
 }
 
-struct StoreCatalogResponse: Decodable, Sendable {
+struct StoreCatalogResponse: Codable, Sendable {
     let updatedAt: String
     let featuredId: String?
     let items: [StoreAppItem]
@@ -390,7 +584,7 @@ struct DynamicCodingKey: CodingKey {
     }
 }
 
-struct StoreInstallIntent: Decodable, Hashable, Sendable {
+struct StoreInstallIntent: Codable, Hashable, Sendable {
     let values: [String: String]
 
     var action: String { values["action"] ?? "" }
@@ -411,9 +605,13 @@ struct StoreInstallIntent: Decodable, Hashable, Sendable {
 
         values = collected
     }
+
+    init(values: [String: String]) {
+        self.values = values
+    }
 }
 
-struct StoreAppItem: Decodable, Identifiable, Hashable, Sendable {
+struct StoreAppItem: Codable, Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let subtitle: String
@@ -437,7 +635,7 @@ struct StoreAppItem: Decodable, Identifiable, Hashable, Sendable {
     let iconAsset: String?
 }
 
-struct CompanionInstallResponse: Decodable, Sendable {
+struct CompanionInstallResponse: Codable, Sendable {
     let ok: Bool
     let action: String
 }

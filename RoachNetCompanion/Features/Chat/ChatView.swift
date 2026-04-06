@@ -4,12 +4,15 @@ struct ChatView: View {
     @Bindable var model: CompanionAppModel
     @FocusState private var composerFocused: Bool
 
-    private let promptSuggestions = [
-        "Summarize my runtime state.",
-        "What model am I running right now?",
-        "Show the latest RoachBrain highlights.",
-        "What should I install next from Apps?",
-    ]
+    private var promptSuggestions: [String] {
+        [
+            "Summarize my runtime state.",
+            "What model am I running right now?",
+            "Show the latest RoachBrain highlights.",
+            "What can you still do offline?",
+            model.recentInstallItems.first.map { _ in "What did I just send from Apps?" } ?? "What should I install next from Apps?",
+        ]
+    }
 
     var body: some View {
         NavigationStack {
@@ -41,11 +44,17 @@ struct ChatView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         RoachSectionHeader(
                             eyebrow: "RoachClaw",
-                            title: model.connection.isConfigured ? "Carry the Mac lane with you." : "Link the Mac lane.",
+                            title: model.connection.isConfigured ? "Carry the Mac lane with you." : "Keep the phone lane alive.",
                             detail: model.currentSession?.title
                                 ?? model.pairedMachineName.map { _ in "Linked to your desktop." }
-                                ?? "Continue chats, control runtime, and push installs from the phone."
+                                ?? "Chat, queue installs, and read cached state even when the desktop is out of reach."
                         )
+
+                        if let lastRefreshAt = model.lastRefreshAt {
+                            Text("Last sync \(formattedRelativeDate(lastRefreshAt))")
+                                .font(.caption)
+                                .foregroundStyle(RoachTheme.subduedText)
+                        }
                     }
 
                     Spacer(minLength: 12)
@@ -65,8 +74,14 @@ struct ChatView: View {
                 HStack(spacing: 10) {
                     RoachMetricTile(
                         label: "Link",
-                        value: model.connection.isConfigured ? "Live" : "Needs token",
+                        value: model.connection.isConfigured ? "Live" : "Offline ready",
                         accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary
+                    )
+
+                    RoachMetricTile(
+                        label: "Offline AI",
+                        value: "Ready",
+                        accent: RoachTheme.primary
                     )
 
                     RoachMetricTile(
@@ -121,7 +136,7 @@ struct ChatView: View {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .strokeBorder(RoachTheme.primary.opacity(0.45), lineWidth: 1)
             )
-        } else if model.connection.isConfigured, let bannerText = model.bannerText {
+        } else if let bannerText = model.bannerText {
             RoachPanel {
                 Text(bannerText)
                     .font(.subheadline)
@@ -132,31 +147,7 @@ struct ChatView: View {
 
     @ViewBuilder
     private var content: some View {
-        if !model.connection.isConfigured {
-            EmptyStateView(
-                title: "Link the Mac lane",
-                detail: "Paste the companion URL and token from your desktop install. Chat, runtime control, vault access, and app installs light up right after.",
-                actionTitle: "Link Mac"
-            ) {
-                model.settingsPresented = true
-            }
-        } else if model.isBootstrapping, model.currentSession == nil, model.sessionList.isEmpty {
-            RoachPanel {
-                HStack(spacing: 12) {
-                    ProgressView()
-                        .tint(RoachTheme.primary)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Loading RoachClaw lane")
-                            .font(.headline)
-                            .foregroundStyle(RoachTheme.text)
-                        Text("Pulling the paired desktop session state.")
-                            .font(.subheadline)
-                            .foregroundStyle(RoachTheme.subduedText)
-                    }
-                    Spacer()
-                }
-            }
-        } else if let currentSession = model.currentSession {
+        if let currentSession = model.currentSession {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
@@ -192,6 +183,30 @@ struct ChatView: View {
                     withAnimation(.easeOut(duration: 0.24)) {
                         proxy.scrollTo(lastID, anchor: .bottom)
                     }
+                }
+            }
+        } else if !model.connection.isConfigured {
+            EmptyStateView(
+                title: "Link the Mac lane",
+                detail: "Paste the companion URL and token from your desktop install. Chat, runtime control, vault access, and app installs light up right after.",
+                actionTitle: "Link Mac"
+            ) {
+                model.settingsPresented = true
+            }
+        } else if model.isBootstrapping, model.currentSession == nil, model.sessionList.isEmpty {
+            RoachPanel {
+                HStack(spacing: 12) {
+                    ProgressView()
+                        .tint(RoachTheme.primary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Loading RoachClaw lane")
+                            .font(.headline)
+                            .foregroundStyle(RoachTheme.text)
+                        Text("Pulling the paired desktop session state.")
+                            .font(.subheadline)
+                            .foregroundStyle(RoachTheme.subduedText)
+                    }
+                    Spacer()
                 }
             }
         } else {
@@ -253,13 +268,12 @@ struct ChatView: View {
     private var composer: some View {
         RoachPanel {
             HStack(alignment: .bottom, spacing: 12) {
-                TextField("Message RoachClaw", text: $model.draft, axis: .vertical)
+                TextField("Message RoachClaw or the offline lane", text: $model.draft, axis: .vertical)
                     .focused($composerFocused)
                     .textInputAutocapitalization(.sentences)
                     .lineLimit(1...6)
                     .padding(12)
                     .background(RoachTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .disabled(!model.connection.isConfigured)
 
                 Button {
                     Task {
@@ -276,7 +290,7 @@ struct ChatView: View {
                     }
                 }
                 .foregroundStyle(Color.white)
-                .disabled(!model.connection.isConfigured || model.isSending || model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(model.isSending || model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }

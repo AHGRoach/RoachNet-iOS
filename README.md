@@ -9,6 +9,7 @@ It keeps the AI lane front and center, so you can continue RoachClaw chats, chec
 - Continues RoachClaw chats from your Mac
 - Reads RoachBrain, vault files, and site archives from the paired install
 - Shows runtime health, models, downloads, and service state
+- Surfaces RoachTail status so the private device lane stays visible on the phone
 - Sends RoachNet Apps installs from the phone back to the Mac runtime
 - Stays sideload-friendly and open-source friendly with no closed SDK dependencies
 
@@ -16,7 +17,7 @@ It keeps the AI lane front and center, so you can continue RoachClaw chats, chec
 
 The phone app talks to the Mac over the token-gated companion lane.
 
-This `v0.1.0` release targets the companion-enabled RoachNet desktop runtime source lane. The Mac side needs the companion bridge env vars enabled before the phone can pair.
+This `v0.1.1` release targets the companion-enabled RoachNet desktop runtime source lane. The Mac side needs the companion bridge env vars enabled before the phone can pair.
 
 Desktop runtime values:
 
@@ -58,8 +59,8 @@ cd RoachNet-iOS
 
 That writes:
 
-- `dist/RoachNetCompanion-v0.1.0-unsigned.ipa`
-- `dist/RoachNetCompanion-v0.1.0-unsigned.ipa.sha256`
+- `dist/RoachNetiOS-v0.1.1-unsigned.ipa`
+- `dist/RoachNetiOS-v0.1.1-unsigned.ipa.sha256`
 
 ## Install
 
@@ -74,13 +75,13 @@ Open the IPA in SideStore or AltStore and sign it with your Apple ID. The detail
 
 ## Release notes
 
-`v0.1.0` ships:
+`v0.1.1` ships:
 
-- Chat-first iPhone/iPad shell
-- RoachClaw session history and local fallback session creation
-- Vault summaries for RoachBrain, indexed files, and archives
-- Runtime status and service controls
-- RoachNet Apps install handoff from phone to desktop
+- Faster first paint from cached state
+- Preview mode for the unpaired phone lane
+- Saved Apps and recent install rows in the mobile store
+- RoachTail-aware runtime status with peer and bridge visibility
+- Chat, vault, Apps, and runtime surfaces tuned for the current desktop lane
 - SideStore / AltStore friendly unsigned IPA packaging
 
 ## Repo layout

@@ -11,6 +11,7 @@ struct RuntimeView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         connectionPanel
+                        roachTailPanel
                         machinePanel
                         roachClawPanel
                         servicesPanel
@@ -36,6 +37,177 @@ struct RuntimeView: View {
         }
     }
 
+    @ViewBuilder
+    private var roachTailPanel: some View {
+        if let roachTail = model.runtime?.roachTail {
+            RoachPanel {
+                VStack(alignment: .leading, spacing: 12) {
+                    RoachSectionHeader(
+                        eyebrow: "RoachTail",
+                        title: roachTail.enabled ? "Private device lane is \(roachTail.status)." : "Private device lane is off.",
+                        detail: "RoachTail is the private overlay for mobile control, chat carryover, and remote installs."
+                    )
+
+                    HStack(spacing: 10) {
+                        RoachMetricTile(
+                            label: "Network",
+                            value: roachTail.networkName,
+                            accent: RoachTheme.primary
+                        )
+
+                        RoachMetricTile(
+                            label: "Peers",
+                            value: "\(roachTail.peers.count)",
+                            accent: RoachTheme.secondary
+                        )
+
+                        RoachMetricTile(
+                            label: "State",
+                            value: roachTail.status.capitalized,
+                            accent: roachTail.enabled ? RoachTheme.tertiary : RoachTheme.primary
+                        )
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 10) {
+                            Toggle(
+                                isOn: Binding(
+                                    get: { model.runtime?.roachTail?.enabled ?? false },
+                                    set: { nextValue in
+                                        Task {
+                                            await model.affectRoachTail(nextValue ? "enable" : "disable")
+                                        }
+                                    }
+                                )
+                            ) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("RoachTail")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RoachTheme.text)
+                                    Text(roachTail.enabled ? "Private overlay is armed." : "Private overlay is off.")
+                                        .font(.caption)
+                                        .foregroundStyle(RoachTheme.subduedText)
+                                }
+                            }
+                            .toggleStyle(.switch)
+                            .tint(RoachTheme.secondary)
+                            .disabled(model.isActingRoachTail)
+
+                            if !model.usingRoachTailPeerToken {
+                                Button {
+                                    Task { await model.affectRoachTail("refresh-join-code") }
+                                } label: {
+                                    Text("Refresh code")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(model.isActingRoachTail || !roachTail.enabled)
+                            }
+                        }
+
+                        HStack(spacing: 10) {
+                            Button {
+                                Task {
+                                    if model.roachTailIsLinked {
+                                        await model.unlinkThisDeviceFromRoachTail()
+                                    } else {
+                                        await model.linkThisDeviceToRoachTail()
+                                    }
+                                }
+                            } label: {
+                                Text(model.roachTailIsLinked ? "Unlink this device" : "Link this device")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(model.isActingRoachTail || !roachTail.enabled)
+
+                            if !model.usingRoachTailPeerToken {
+                                Button {
+                                    Task { await model.affectRoachTail("clear-peers") }
+                                } label: {
+                                    Text("Clear peers")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(model.isActingRoachTail || roachTail.peers.isEmpty)
+                            }
+                        }
+                    }
+
+                    if let advertisedUrl = roachTail.advertisedUrl, !advertisedUrl.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Bridge")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RoachTheme.secondary)
+                            Text(advertisedUrl)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(RoachTheme.text)
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    if let joinCode = roachTail.joinCode, !joinCode.isEmpty {
+                        HStack(spacing: 8) {
+                            Text("Join code")
+                                .font(.caption)
+                                .foregroundStyle(RoachTheme.subduedText)
+                            Text(joinCode)
+                                .font(.caption.monospaced().weight(.semibold))
+                                .foregroundStyle(RoachTheme.text)
+                        }
+                    } else if model.usingRoachTailPeerToken {
+                        Text("Join-code controls stay on the Mac or any device still using the desktop companion token.")
+                            .font(.caption)
+                            .foregroundStyle(RoachTheme.subduedText)
+                    }
+
+                    if !roachTail.peers.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Linked devices")
+                                .font(.headline)
+                                .foregroundStyle(RoachTheme.text)
+
+                            ForEach(roachTail.peers.prefix(4)) { peer in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(peer.name)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(RoachTheme.text)
+                                        Spacer()
+                                        Text(peer.status.capitalized)
+                                            .font(.caption)
+                                            .foregroundStyle(RoachTheme.secondary)
+                                    }
+
+                                    Text("\(peer.platform) · \(peer.endpoint ?? "Peer lane ready")")
+                                        .font(.caption)
+                                        .foregroundStyle(RoachTheme.subduedText)
+
+                                    if !peer.tags.isEmpty {
+                                        Text(peer.tags.joined(separator: " · "))
+                                            .font(.caption2)
+                                            .foregroundStyle(RoachTheme.tertiary)
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
+
+                    if !roachTail.notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(roachTail.notes.prefix(3), id: \.self) { note in
+                                Text(note)
+                                    .font(.caption)
+                                    .foregroundStyle(RoachTheme.subduedText)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private var connectionPanel: some View {
         RoachPanel {
             VStack(alignment: .leading, spacing: 12) {
@@ -54,7 +226,9 @@ struct RuntimeView: View {
 
                     RoachMetricTile(
                         label: "Token",
-                        value: model.connection.isConfigured ? "Loaded" : "Missing",
+                        value: model.connection.isConfigured
+                            ? (model.usingRoachTailPeerToken ? "RoachTail peer" : "Desktop token")
+                            : "Missing",
                         accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary
                     )
                 }
@@ -63,6 +237,16 @@ struct RuntimeView: View {
                     Text("Paired desktop linked.")
                         .font(.caption)
                         .foregroundStyle(RoachTheme.subduedText)
+                } else if !model.connection.isConfigured {
+                    Text("Previewing the runtime lane until you pair the Mac.")
+                        .font(.caption)
+                        .foregroundStyle(RoachTheme.subduedText)
+                }
+
+                if let lastRefreshAt = model.lastRefreshAt {
+                    Text("Last sync \(formattedRelativeDate(lastRefreshAt))")
+                        .font(.caption)
+                        .foregroundStyle(RoachTheme.secondary)
                 }
             }
         }

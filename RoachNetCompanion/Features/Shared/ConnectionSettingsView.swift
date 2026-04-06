@@ -15,7 +15,7 @@ struct ConnectionSettingsView: View {
                             RoachSectionHeader(
                                 eyebrow: "Pairing",
                                 title: "Link this phone to your Mac.",
-                                detail: "Point the app at the companion URL and token from your RoachNet desktop runtime."
+                                detail: "Use the companion URL with a RoachTail join code, or paste the full companion token if you already have it."
                             )
 
                             VStack(alignment: .leading, spacing: 8) {
@@ -25,6 +25,18 @@ struct ConnectionSettingsView: View {
 
                                 TextField("http://192.168.1.10:38111", text: $model.connection.baseURL)
                                     .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .padding(12)
+                                    .background(RoachTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("RoachTail join code")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RoachTheme.subduedText)
+
+                                TextField("ROACH-ABCDE-12345", text: $model.connection.pairCode)
+                                    .textInputAutocapitalization(.characters)
                                     .autocorrectionDisabled()
                                     .padding(12)
                                     .background(RoachTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -53,13 +65,20 @@ struct ConnectionSettingsView: View {
                             )
 
                             RoachBadge(
-                                title: model.connection.isConfigured ? "Configured" : "Needs setup",
+                                title: model.connection.isConfigured
+                                    ? (model.usingRoachTailPeerToken ? "Paired over RoachTail" : "Configured")
+                                    : "Needs setup",
                                 accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary
                             )
 
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Simulator default: http://127.0.0.1:38111")
                                 Text("Phone default: http://<your-mac-ip>:38111")
+                                Text(
+                                    model.usingRoachTailPeerToken
+                                        ? "This iPhone is already using its own RoachTail peer token."
+                                        : "Pair once with the join code to mint a private RoachTail bridge token for this device."
+                                )
                             }
                             .font(.caption)
                             .foregroundStyle(RoachTheme.subduedText)
@@ -67,6 +86,17 @@ struct ConnectionSettingsView: View {
                     }
 
                     HStack(spacing: 12) {
+                        Button("Pair with RoachTail") {
+                            Task {
+                                await model.pairWithRoachTail()
+                                if model.connection.isConfigured {
+                                    dismiss()
+                                }
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(RoachTheme.secondary)
+
                         Button("Save & Test") {
                             Task {
                                 model.connection.save()

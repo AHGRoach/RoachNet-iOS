@@ -65,6 +65,12 @@ struct VaultView: View {
                     RoachMetricTile(label: "Files", value: "\(vault.knowledgeFiles.count)", accent: RoachTheme.secondary)
                     RoachMetricTile(label: "Archives", value: "\(vault.siteArchives.count)", accent: RoachTheme.tertiary)
                 }
+
+                if let lastRefreshAt = model.lastRefreshAt {
+                    Text("Last sync \(formattedRelativeDate(lastRefreshAt))")
+                        .font(.caption)
+                        .foregroundStyle(RoachTheme.subduedText)
+                }
             }
         }
     }

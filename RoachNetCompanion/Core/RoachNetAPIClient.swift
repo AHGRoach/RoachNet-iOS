@@ -23,8 +23,15 @@ enum RoachNetAPIError: LocalizedError {
 struct CompanionConnectionSettings: Codable, Hashable, Sendable {
     var baseURL: String
     var token: String
+    var pairCode: String
 
     static let storageKey = "RoachNetCompanionConnection"
+
+    private enum CodingKeys: String, CodingKey {
+        case baseURL
+        case token
+        case pairCode
+    }
 
     static func load() -> CompanionConnectionSettings {
         if
@@ -44,7 +51,8 @@ struct CompanionConnectionSettings: Codable, Hashable, Sendable {
 
         return CompanionConnectionSettings(
             baseURL: defaultBaseURL,
-            token: ""
+            token: "",
+            pairCode: ""
         )
     }
 
@@ -64,8 +72,32 @@ struct CompanionConnectionSettings: Codable, Hashable, Sendable {
         UserDefaults.standard.set(encoded, forKey: Self.storageKey)
     }
 
+    init(baseURL: String, token: String, pairCode: String = "") {
+        self.baseURL = baseURL
+        self.token = token
+        self.pairCode = pairCode
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        baseURL = try container.decodeIfPresent(String.self, forKey: .baseURL) ?? Self.defaultBaseURL
+        token = try container.decodeIfPresent(String.self, forKey: .token) ?? ""
+        pairCode = try container.decodeIfPresent(String.self, forKey: .pairCode) ?? ""
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(baseURL, forKey: .baseURL)
+        try container.encode(token, forKey: .token)
+        try container.encode(pairCode, forKey: .pairCode)
+    }
+
     var isConfigured: Bool {
         resolvedBaseURL != nil && !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var usesRoachTailPeerToken: Bool {
+        token.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("rtp_")
     }
 
     var resolvedBaseURL: URL? {
@@ -79,8 +111,21 @@ struct RoachNetAPIClient {
     private let session: URLSession
     private let decoder: JSONDecoder
 
-    init(session: URLSession = .shared) {
-        self.session = session
+    init(session: URLSession? = nil) {
+        if let session {
+            self.session = session
+        } else {
+            let configuration = URLSessionConfiguration.default
+            configuration.requestCachePolicy = .returnCacheDataElseLoad
+            configuration.timeoutIntervalForRequest = 18
+            configuration.timeoutIntervalForResource = 30
+            configuration.waitsForConnectivity = false
+            configuration.urlCache = URLCache(
+                memoryCapacity: 8 * 1024 * 1024,
+                diskCapacity: 32 * 1024 * 1024
+            )
+            self.session = URLSession(configuration: configuration)
+        }
         decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
     }
@@ -95,6 +140,54 @@ struct RoachNetAPIClient {
 
     func vault(using connection: CompanionConnectionSettings) async throws -> CompanionVaultSummary {
         try await request("/api/companion/vault", using: connection)
+    }
+
+    func roachTail(using connection: CompanionConnectionSettings) async throws -> CompanionRoachTailStatus {
+        try await request("/api/companion/roachtail", using: connection)
+    }
+
+    func pairRoachTail(
+        joinCode: String,
+        peerID: String,
+        peerName: String,
+        platform: String,
+        appVersion: String? = nil,
+        tags: [String] = [],
+        using connection: CompanionConnectionSettings
+    ) async throws -> CompanionRoachTailPairResponse {
+        guard let baseURL = connection.resolvedBaseURL else {
+            throw RoachNetAPIError.invalidBaseURL
+        }
+
+        let url = URL(string: "api/companion/roachtail/pair", relativeTo: baseURL) ?? baseURL.appendingPathComponent("api/companion/roachtail/pair")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "joinCode": joinCode,
+            "peerId": peerID,
+            "peerName": peerName,
+            "platform": platform,
+            "appVersion": appVersion ?? "",
+            "tags": tags,
+        ])
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw RoachNetAPIError.requestFailed("The RoachTail pair lane did not return an HTTP response.")
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            if let envelope = try? decoder.decode(APIErrorEnvelope.self, from: data) {
+                throw RoachNetAPIError.requestFailed(envelope.error)
+            }
+
+            throw RoachNetAPIError.requestFailed("The RoachTail pair lane returned \(httpResponse.statusCode).")
+        }
+
+        return try decode(CompanionRoachTailPairResponse.self, from: data)
     }
 
     func createSession(
@@ -176,6 +269,47 @@ struct RoachNetAPIClient {
                 "serviceName": serviceName,
                 "action": action,
             ],
+            using: connection
+        )
+    }
+
+    func affectRoachTail(
+        action: String,
+        peerID: String? = nil,
+        peerName: String? = nil,
+        platform: String? = nil,
+        endpoint: String? = nil,
+        relayHost: String? = nil,
+        tags: [String] = [],
+        using connection: CompanionConnectionSettings
+    ) async throws -> CompanionActionResponse {
+        var body: [String: Any] = [
+            "action": action,
+        ]
+
+        if let peerID, !peerID.isEmpty {
+            body["peerId"] = peerID
+        }
+        if let peerName, !peerName.isEmpty {
+            body["peerName"] = peerName
+        }
+        if let platform, !platform.isEmpty {
+            body["platform"] = platform
+        }
+        if let endpoint, !endpoint.isEmpty {
+            body["endpoint"] = endpoint
+        }
+        if let relayHost, !relayHost.isEmpty {
+            body["relayHost"] = relayHost
+        }
+        if !tags.isEmpty {
+            body["tags"] = tags
+        }
+
+        return try await request(
+            "/api/companion/roachtail/affect",
+            method: "POST",
+            body: body,
             using: connection
         )
     }

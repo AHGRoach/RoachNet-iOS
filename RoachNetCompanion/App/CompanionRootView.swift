@@ -38,7 +38,12 @@ struct CompanionRootView: View {
             .toolbarBackground(RoachTheme.surface.opacity(0.96), for: .tabBar)
         }
         .task {
-            if !didPresentInitialSettings && !model.connection.isConfigured {
+            if
+                !didPresentInitialSettings &&
+                !model.connection.isConfigured &&
+                model.currentSession == nil &&
+                model.runtime == nil
+            {
                 didPresentInitialSettings = true
                 model.settingsPresented = true
             }

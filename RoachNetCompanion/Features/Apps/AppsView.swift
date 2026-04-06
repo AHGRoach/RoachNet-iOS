@@ -15,6 +15,9 @@ struct AppsView: View {
                         searchField
                         categoryStrip
                         sectionIntro
+                        savedStrip
+                        recentInstallsStrip
+                        queuedInstallsStrip
                         spotlightRow
                         catalogGrid
                     }
@@ -52,6 +55,7 @@ struct AppsView: View {
                         Spacer()
 
                         VStack(alignment: .trailing, spacing: 8) {
+                            favoriteButton(for: item)
                             RoachBadge(title: model.connection.isConfigured ? "Install-ready" : "Link Mac first", accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary)
                             if let status = item.status {
                                 RoachBadge(title: status, accent: roachAccentColor(for: item.accent))
@@ -152,6 +156,93 @@ struct AppsView: View {
                         value: model.connection.isConfigured ? "Ready" : "Needs pairing",
                         accent: model.connection.isConfigured ? RoachTheme.tertiary : RoachTheme.primary
                     )
+
+                    RoachMetricTile(
+                        label: "Saved",
+                        value: "\(model.favoriteItems.count)",
+                        accent: RoachTheme.primary
+                    )
+
+                    RoachMetricTile(
+                        label: "Queued",
+                        value: "\(model.queuedInstallCount)",
+                        accent: model.queuedInstallCount > 0 ? RoachTheme.secondary : RoachTheme.tertiary
+                    )
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var savedStrip: some View {
+        if !model.favoriteItems.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Saved")
+                    .font(.headline)
+                    .foregroundStyle(RoachTheme.text)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(model.favoriteItems.prefix(8)) { item in
+                            SpotlightCard(model: model, item: item)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var recentInstallsStrip: some View {
+        if !model.recentInstallItems.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Recently sent")
+                    .font(.headline)
+                    .foregroundStyle(RoachTheme.text)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(model.recentInstallItems.prefix(8)) { item in
+                            SpotlightCard(model: model, item: item)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var queuedInstallsStrip: some View {
+        if !model.pendingInstallQueue.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Queued for desktop")
+                    .font(.headline)
+                    .foregroundStyle(RoachTheme.text)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(model.pendingInstallQueue.prefix(8)) { item in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(item.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(RoachTheme.text)
+                                    .lineLimit(1)
+                                Text("Queued \(formattedRelativeDate(item.createdAt))")
+                                    .font(.caption)
+                                    .foregroundStyle(RoachTheme.subduedText)
+                            }
+                            .frame(width: 180, alignment: .leading)
+                            .padding(14)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(RoachTheme.surface.opacity(0.96))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .strokeBorder(RoachTheme.border, lineWidth: 1)
+                                    )
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -306,6 +397,14 @@ private struct AppCard: View {
                 Spacer(minLength: 0)
 
                 HStack(spacing: 10) {
+                    Button {
+                        model.toggleFavorite(item)
+                    } label: {
+                        Image(systemName: model.isFavorite(item) ? "heart.fill" : "heart")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(model.isFavorite(item) ? RoachTheme.primary : RoachTheme.secondary)
+
                     Button(item.installLabel ?? "Install") {
                         Task { await model.install(item) }
                     }
@@ -346,6 +445,14 @@ private struct AppDetailSheet: View {
                                         accent: roachAccentColor(for: item.accent)
                                     )
                                     Spacer()
+                                    Button {
+                                        model.toggleFavorite(item)
+                                    } label: {
+                                        Image(systemName: model.isFavorite(item) ? "heart.fill" : "heart")
+                                            .font(.headline)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(model.isFavorite(item) ? RoachTheme.primary : RoachTheme.secondary)
                                     if let source = item.source {
                                         RoachBadge(title: source, accent: roachAccentColor(for: item.accent))
                                     }
@@ -400,5 +507,19 @@ private struct AppDetailSheet: View {
                 }
             }
         }
+    }
+}
+
+private extension AppsView {
+    func favoriteButton(for item: StoreAppItem) -> some View {
+        Button {
+            model.toggleFavorite(item)
+        } label: {
+            Image(systemName: model.isFavorite(item) ? "heart.fill" : "heart")
+                .font(.headline)
+                .foregroundStyle(Color.white)
+        }
+        .buttonStyle(.bordered)
+        .tint(model.isFavorite(item) ? RoachTheme.primary : RoachTheme.secondary)
     }
 }
