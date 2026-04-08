@@ -308,9 +308,16 @@ struct CompanionRoachTailStatus: Codable, Hashable, Sendable {
     let deviceName: String
     let deviceId: String
     let status: String
+    let transportMode: String?
+    let secureOverlay: Bool?
     let relayHost: String?
     let advertisedUrl: String?
+    let runtimeOrigin: String?
+    let runtimeTunnelUrl: String?
     let joinCode: String?
+    let joinCodeExpiresAt: Date?
+    let pairingPayload: String?
+    let pairingIssuedAt: Date?
     let lastUpdatedAt: Date?
     let notes: [String]
     let peers: [CompanionRoachTailPeer]
@@ -321,9 +328,16 @@ struct CompanionRoachTailStatus: Codable, Hashable, Sendable {
         case deviceName
         case deviceId
         case status
+        case transportMode
+        case secureOverlay
         case relayHost
         case advertisedUrl
+        case runtimeOrigin
+        case runtimeTunnelUrl
         case joinCode
+        case joinCodeExpiresAt
+        case pairingPayload
+        case pairingIssuedAt
         case lastUpdatedAt
         case notes
         case peers
@@ -336,9 +350,16 @@ struct CompanionRoachTailStatus: Codable, Hashable, Sendable {
         deviceName = (try? container.decode(String.self, forKey: .deviceName)) ?? "RoachNet device"
         deviceId = (try? container.decode(String.self, forKey: .deviceId)) ?? UUID().uuidString
         status = (try? container.decode(String.self, forKey: .status)) ?? "local-only"
+        transportMode = try? container.decodeIfPresent(String.self, forKey: .transportMode)
+        secureOverlay = try? container.decodeIfPresent(Bool.self, forKey: .secureOverlay)
         relayHost = try? container.decodeIfPresent(String.self, forKey: .relayHost)
         advertisedUrl = try? container.decodeIfPresent(String.self, forKey: .advertisedUrl)
+        runtimeOrigin = try? container.decodeIfPresent(String.self, forKey: .runtimeOrigin)
+        runtimeTunnelUrl = try? container.decodeIfPresent(String.self, forKey: .runtimeTunnelUrl)
         joinCode = try? container.decodeIfPresent(String.self, forKey: .joinCode)
+        joinCodeExpiresAt = container.decodeLossyDateIfPresent(forKey: .joinCodeExpiresAt)
+        pairingPayload = try? container.decodeIfPresent(String.self, forKey: .pairingPayload)
+        pairingIssuedAt = container.decodeLossyDateIfPresent(forKey: .pairingIssuedAt)
         lastUpdatedAt = container.decodeLossyDateIfPresent(forKey: .lastUpdatedAt)
         notes = (try? container.decode([String].self, forKey: .notes)) ?? []
         peers = (try? container.decode([CompanionRoachTailPeer].self, forKey: .peers)) ?? []
@@ -350,9 +371,16 @@ struct CompanionRoachTailStatus: Codable, Hashable, Sendable {
         deviceName: String,
         deviceId: String,
         status: String,
+        transportMode: String?,
+        secureOverlay: Bool?,
         relayHost: String?,
         advertisedUrl: String?,
+        runtimeOrigin: String?,
+        runtimeTunnelUrl: String?,
         joinCode: String?,
+        joinCodeExpiresAt: Date?,
+        pairingPayload: String?,
+        pairingIssuedAt: Date?,
         lastUpdatedAt: Date?,
         notes: [String],
         peers: [CompanionRoachTailPeer]
@@ -362,12 +390,147 @@ struct CompanionRoachTailStatus: Codable, Hashable, Sendable {
         self.deviceName = deviceName
         self.deviceId = deviceId
         self.status = status
+        self.transportMode = transportMode
+        self.secureOverlay = secureOverlay
         self.relayHost = relayHost
         self.advertisedUrl = advertisedUrl
+        self.runtimeOrigin = runtimeOrigin
+        self.runtimeTunnelUrl = runtimeTunnelUrl
         self.joinCode = joinCode
+        self.joinCodeExpiresAt = joinCodeExpiresAt
+        self.pairingPayload = pairingPayload
+        self.pairingIssuedAt = pairingIssuedAt
         self.lastUpdatedAt = lastUpdatedAt
         self.notes = notes
         self.peers = peers
+    }
+}
+
+struct CompanionRoachSyncPeer: Codable, Identifiable, Hashable, Sendable {
+    let id: String
+    let name: String
+    let deviceId: String
+    let status: String
+    let lastSeenAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case deviceId
+        case status
+        case lastSeenAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        name = (try? container.decode(String.self, forKey: .name)) ?? "RoachSync peer"
+        deviceId = (try? container.decode(String.self, forKey: .deviceId)) ?? UUID().uuidString
+        status = (try? container.decode(String.self, forKey: .status)) ?? "linked"
+        lastSeenAt = container.decodeLossyDateIfPresent(forKey: .lastSeenAt)
+    }
+
+    init(
+        id: String,
+        name: String,
+        deviceId: String,
+        status: String,
+        lastSeenAt: Date?
+    ) {
+        self.id = id
+        self.name = name
+        self.deviceId = deviceId
+        self.status = status
+        self.lastSeenAt = lastSeenAt
+    }
+}
+
+struct CompanionRoachSyncStatus: Codable, Hashable, Sendable {
+    let enabled: Bool
+    let provider: String
+    let networkName: String
+    let deviceName: String
+    let deviceId: String
+    let status: String
+    let folderId: String
+    let folderPath: String
+    let guiUrl: String?
+    let apiUrl: String?
+    let transportMode: String?
+    let secureOverlay: Bool?
+    let notes: [String]
+    let peers: [CompanionRoachSyncPeer]
+    let lastUpdatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case provider
+        case networkName
+        case deviceName
+        case deviceId
+        case status
+        case folderId
+        case folderPath
+        case guiUrl
+        case apiUrl
+        case transportMode
+        case secureOverlay
+        case notes
+        case peers
+        case lastUpdatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = (try? container.decode(Bool.self, forKey: .enabled)) ?? false
+        provider = (try? container.decode(String.self, forKey: .provider)) ?? "Syncthing"
+        networkName = (try? container.decode(String.self, forKey: .networkName)) ?? "RoachSync"
+        deviceName = (try? container.decode(String.self, forKey: .deviceName)) ?? "RoachNet device"
+        deviceId = (try? container.decode(String.self, forKey: .deviceId)) ?? UUID().uuidString
+        status = (try? container.decode(String.self, forKey: .status)) ?? "idle"
+        folderId = (try? container.decode(String.self, forKey: .folderId)) ?? "roachnet-vault"
+        folderPath = (try? container.decode(String.self, forKey: .folderPath)) ?? ""
+        guiUrl = try? container.decodeIfPresent(String.self, forKey: .guiUrl)
+        apiUrl = try? container.decodeIfPresent(String.self, forKey: .apiUrl)
+        transportMode = try? container.decodeIfPresent(String.self, forKey: .transportMode)
+        secureOverlay = try? container.decodeIfPresent(Bool.self, forKey: .secureOverlay)
+        notes = (try? container.decode([String].self, forKey: .notes)) ?? []
+        peers = (try? container.decode([CompanionRoachSyncPeer].self, forKey: .peers)) ?? []
+        lastUpdatedAt = container.decodeLossyDateIfPresent(forKey: .lastUpdatedAt)
+    }
+
+    init(
+        enabled: Bool,
+        provider: String,
+        networkName: String,
+        deviceName: String,
+        deviceId: String,
+        status: String,
+        folderId: String,
+        folderPath: String,
+        guiUrl: String?,
+        apiUrl: String?,
+        transportMode: String?,
+        secureOverlay: Bool?,
+        notes: [String],
+        peers: [CompanionRoachSyncPeer],
+        lastUpdatedAt: Date?
+    ) {
+        self.enabled = enabled
+        self.provider = provider
+        self.networkName = networkName
+        self.deviceName = deviceName
+        self.deviceId = deviceId
+        self.status = status
+        self.folderId = folderId
+        self.folderPath = folderPath
+        self.guiUrl = guiUrl
+        self.apiUrl = apiUrl
+        self.transportMode = transportMode
+        self.secureOverlay = secureOverlay
+        self.notes = notes
+        self.peers = peers
+        self.lastUpdatedAt = lastUpdatedAt
     }
 }
 
@@ -410,6 +573,80 @@ struct CompanionRoachTailPairResponse: Codable, Hashable, Sendable {
     let state: CompanionRoachTailStatus?
 }
 
+struct CompanionRoachTailPairingPayload: Codable, Hashable, Sendable {
+    let schema: String
+    let version: Int
+    let networkName: String
+    let deviceName: String
+    let deviceId: String
+    let joinCode: String
+    let joinCodeExpiresAt: Date?
+    let bridgeUrl: String?
+    let runtimeOrigin: String?
+    let runtimeTunnelUrl: String?
+    let transportMode: String?
+    let secureOverlay: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case version
+        case networkName
+        case deviceName
+        case deviceId
+        case joinCode
+        case joinCodeExpiresAt
+        case bridgeUrl
+        case runtimeOrigin
+        case runtimeTunnelUrl
+        case transportMode
+        case secureOverlay
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schema = (try? container.decode(String.self, forKey: .schema)) ?? "roachnet.roachtail.v1"
+        version = (try? container.decode(Int.self, forKey: .version)) ?? 1
+        networkName = (try? container.decode(String.self, forKey: .networkName)) ?? "RoachTail"
+        deviceName = (try? container.decode(String.self, forKey: .deviceName)) ?? "RoachNet device"
+        deviceId = (try? container.decode(String.self, forKey: .deviceId)) ?? UUID().uuidString
+        joinCode = (try? container.decode(String.self, forKey: .joinCode)) ?? ""
+        joinCodeExpiresAt = container.decodeLossyDateIfPresent(forKey: .joinCodeExpiresAt)
+        bridgeUrl = try? container.decodeIfPresent(String.self, forKey: .bridgeUrl)
+        runtimeOrigin = try? container.decodeIfPresent(String.self, forKey: .runtimeOrigin)
+        runtimeTunnelUrl = try? container.decodeIfPresent(String.self, forKey: .runtimeTunnelUrl)
+        transportMode = try? container.decodeIfPresent(String.self, forKey: .transportMode)
+        secureOverlay = try? container.decodeIfPresent(Bool.self, forKey: .secureOverlay)
+    }
+
+    init(
+        schema: String,
+        version: Int,
+        networkName: String,
+        deviceName: String,
+        deviceId: String,
+        joinCode: String,
+        joinCodeExpiresAt: Date?,
+        bridgeUrl: String?,
+        runtimeOrigin: String?,
+        runtimeTunnelUrl: String?,
+        transportMode: String?,
+        secureOverlay: Bool?
+    ) {
+        self.schema = schema
+        self.version = version
+        self.networkName = networkName
+        self.deviceName = deviceName
+        self.deviceId = deviceId
+        self.joinCode = joinCode
+        self.joinCodeExpiresAt = joinCodeExpiresAt
+        self.bridgeUrl = bridgeUrl
+        self.runtimeOrigin = runtimeOrigin
+        self.runtimeTunnelUrl = runtimeTunnelUrl
+        self.transportMode = transportMode
+        self.secureOverlay = secureOverlay
+    }
+}
+
 struct CompanionHardwareProfile: Codable, Hashable, Sendable {
     let platformLabel: String?
     let chipFamily: String?
@@ -441,6 +678,7 @@ struct CompanionRuntimeSummary: Codable, Hashable, Sendable {
     let providers: CompanionProviderEnvelope
     let roachClaw: CompanionRoachClawStatus
     let roachTail: CompanionRoachTailStatus?
+    let roachSync: CompanionRoachSyncStatus?
     let services: [CompanionService]
     let downloads: [CompanionDownloadJob]
     let installedModels: [CompanionInstalledModel]

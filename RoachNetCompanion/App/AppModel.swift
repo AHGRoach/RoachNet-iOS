@@ -60,7 +60,7 @@ final class CompanionAppModel {
 
         if forceDemoMode {
             connection = CompanionConnectionSettings(
-                baseURL: "http://127.0.0.1:38111",
+                baseURL: "http://RoachNet:38111",
                 token: "preview-lane"
             )
         }
@@ -569,6 +569,7 @@ final class CompanionAppModel {
                     providers: runtime?.providers ?? CompanionProviderEnvelope(providers: [:]),
                     roachClaw: runtime?.roachClaw ?? CompanionDemoState.runtime.roachClaw,
                     roachTail: existing,
+                    roachSync: runtime?.roachSync ?? CompanionDemoState.runtime.roachSync,
                     services: runtime?.services ?? [],
                     downloads: runtime?.downloads ?? [],
                     installedModels: runtime?.installedModels ?? [],
@@ -807,6 +808,7 @@ final class CompanionAppModel {
             providers: existing.providers,
             roachClaw: existing.roachClaw,
             roachTail: status,
+            roachSync: existing.roachSync,
             services: existing.services,
             downloads: existing.downloads,
             installedModels: existing.installedModels,

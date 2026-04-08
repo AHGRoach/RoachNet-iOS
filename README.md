@@ -52,8 +52,8 @@ Desktop runtime values:
 
 Device values:
 
-- Real device: `http://<your-mac-ip>:38111`
-- Simulator: `http://127.0.0.1:38111`
+- Desktop alias: `http://RoachNet:38111`
+- Real device: pair over RoachTail or use the companion bridge URL the Mac advertises
 
 The same install intents used on `apps.roachnet.org` are forwarded through the companion lane into the desktop app.
 

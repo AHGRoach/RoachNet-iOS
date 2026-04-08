@@ -23,7 +23,7 @@ struct ConnectionSettingsView: View {
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(RoachTheme.subduedText)
 
-                                TextField("http://192.168.1.10:38111", text: $model.connection.baseURL)
+                                TextField("http://RoachNet:38111", text: $model.connection.baseURL)
                                     .textInputAutocapitalization(.never)
                                     .autocorrectionDisabled()
                                     .padding(12)
@@ -72,8 +72,8 @@ struct ConnectionSettingsView: View {
                             )
 
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("Simulator default: http://127.0.0.1:38111")
-                                Text("Phone default: http://<your-mac-ip>:38111")
+                                Text("Desktop alias: http://RoachNet:38111")
+                                Text("Phone lane: pair over RoachTail instead of targeting a raw IP.")
                                 Text(
                                     model.usingRoachTailPeerToken
                                         ? "This iPhone is already using its own RoachTail peer token."

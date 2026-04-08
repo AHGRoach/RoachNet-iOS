@@ -27,7 +27,7 @@ Use this when you want the RoachNet companion app on an iPhone or iPad without a
 
 ## Pairing tips
 
-- Use `http://<your-mac-ip>:38111` on a real device.
+- Use the `http://RoachNet:38111` desktop alias when it is available locally, or pair over RoachTail for the secure device lane.
 - Keep the phone and Mac on the same network unless you have your own secure tunnel in front of the companion port.
 - Do not expose the companion token publicly.
 - If installs from the Apps catalog fail, verify the paired Mac runtime is healthy first.

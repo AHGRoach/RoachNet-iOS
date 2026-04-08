@@ -57,11 +57,7 @@ struct CompanionConnectionSettings: Codable, Hashable, Sendable {
     }
 
     private static var defaultBaseURL: String {
-#if targetEnvironment(simulator)
-        "http://127.0.0.1:38111"
-#else
-        "http://192.168.1.10:38111"
-#endif
+        "http://RoachNet:38111"
     }
 
     func save() {
