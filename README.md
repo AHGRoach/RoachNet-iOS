@@ -5,7 +5,7 @@ Phone lane for RoachClaw, vault reads, runtime control, and RoachNet Apps instal
 RoachNetiOS keeps the chat surface close, carries RoachTail pairing, and falls back to cached RoachBrain replies when the desktop or internet drops away.
 
 [RoachNet iOS page](https://roachnet.org/iOS/)  
-[IPA release](https://github.com/AHGRoach/RoachNet-iOS/releases/latest/download/RoachNetiOS-v0.1.1-unsigned.ipa)  
+[IPA release](https://github.com/AHGRoach/RoachNet-iOS/releases/latest/download/RoachNetiOS-v0.1.2-unsigned.ipa)  
 [SideStore notes](./docs/sidestore.md)
 
 ## What It Does
@@ -27,8 +27,8 @@ Builds are shipped as unsigned IPAs for SideStore or AltStore.
 
 Artifacts:
 
-- `dist/RoachNetiOS-v0.1.1-unsigned.ipa`
-- `dist/RoachNetiOS-v0.1.1-unsigned.ipa.sha256`
+- `dist/RoachNetiOS-v0.1.2-unsigned.ipa`
+- `dist/RoachNetiOS-v0.1.2-unsigned.ipa.sha256`
 
 Install flow:
 
@@ -52,8 +52,8 @@ Desktop runtime values:
 
 Device values:
 
-- Real device: `http://<your-mac-ip>:38111`
-- Simulator: `http://127.0.0.1:38111`
+- Desktop alias: `http://RoachNet:38111`
+- Real device: pair over RoachTail or use the companion bridge URL the Mac advertises
 
 The same install intents used on `apps.roachnet.org` are forwarded through the companion lane into the desktop app.
 

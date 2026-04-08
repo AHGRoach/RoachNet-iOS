@@ -509,14 +509,14 @@ enum CompanionDemoState {
                     provider: "ollama",
                     available: true,
                     source: "contained",
-                    baseUrl: "http://127.0.0.1:36434",
+                    baseUrl: "http://RoachNet:36434",
                     error: nil
                 ),
                 "openclaw": CompanionProviderStatus(
                     provider: "openclaw",
                     available: true,
                     source: "contained",
-                    baseUrl: "http://127.0.0.1:13001",
+                    baseUrl: "http://RoachNet:13001",
                     error: nil
                 ),
             ]
@@ -532,14 +532,14 @@ enum CompanionDemoState {
                 provider: "ollama",
                 available: true,
                 source: "contained",
-                baseUrl: "http://127.0.0.1:36434",
+                baseUrl: "http://RoachNet:36434",
                 error: nil
             ),
             openclaw: CompanionProviderStatus(
                 provider: "openclaw",
                 available: true,
                 source: "contained",
-                baseUrl: "http://127.0.0.1:13001",
+                baseUrl: "http://RoachNet:13001",
                 error: nil
             )
         ),
@@ -549,9 +549,16 @@ enum CompanionDemoState {
             deviceName: "Studio Mac",
             deviceId: "studio-mac",
             status: "connected",
+            transportMode: "tailnet-relay",
+            secureOverlay: true,
             relayHost: "relay.roachtail.local",
             advertisedUrl: "https://bridge.roachtail.local/studio-mac",
+            runtimeOrigin: "http://RoachNet:38111",
+            runtimeTunnelUrl: "https://bridge.roachtail.local/studio-mac",
             joinCode: "RT-7Q2H-CLAW",
+            joinCodeExpiresAt: Date().addingTimeInterval(540),
+            pairingPayload: #"{"schema":"roachnet.roachtail.v1","version":1,"networkName":"RoachTail","deviceName":"Studio Mac","deviceId":"studio-mac","joinCode":"RT-7Q2H-CLAW","joinCodeExpiresAt":"2026-04-07T12:00:00Z","bridgeUrl":"https://bridge.roachtail.local/studio-mac","runtimeOrigin":"http://RoachNet:38111","runtimeTunnelUrl":"https://bridge.roachtail.local/studio-mac","transportMode":"tailnet-relay","secureOverlay":true}"#,
+            pairingIssuedAt: Date().addingTimeInterval(-60),
             lastUpdatedAt: Date().addingTimeInterval(-180),
             notes: [
                 "RoachTail keeps your paired devices on a private control lane.",
@@ -580,6 +587,41 @@ enum CompanionDemoState {
                     tags: ["vault", "notes"]
                 ),
             ]
+        ),
+        roachSync: CompanionRoachSyncStatus(
+            enabled: true,
+            provider: "Syncthing",
+            networkName: "RoachSync",
+            deviceName: "Studio Mac",
+            deviceId: "studio-mac",
+            status: "syncing",
+            folderId: "roachnet-vault",
+            folderPath: "~/RoachNet/storage/vault",
+            guiUrl: "http://RoachNet:8384",
+            apiUrl: "http://RoachNet:8384/rest",
+            transportMode: "tailnet-relay",
+            secureOverlay: true,
+            notes: [
+                "RoachSync keeps the RoachNet vault grouped under one sync lane instead of loose host folders.",
+                "The relay-aware path keeps sync metadata aligned with the same private bridge RoachTail uses for control."
+            ],
+            peers: [
+                CompanionRoachSyncPeer(
+                    id: "sync-iphone",
+                    name: "RoachNet iPhone",
+                    deviceId: "iphone-lane",
+                    status: "up-to-date",
+                    lastSeenAt: Date().addingTimeInterval(-95)
+                ),
+                CompanionRoachSyncPeer(
+                    id: "sync-ipad",
+                    name: "RoachNet iPad",
+                    deviceId: "ipad-lane",
+                    status: "syncing",
+                    lastSeenAt: Date().addingTimeInterval(-380)
+                ),
+            ],
+            lastUpdatedAt: Date().addingTimeInterval(-110)
         ),
         services: [
             CompanionService(serviceName: "ollama", friendlyName: "Ollama", status: "Running", installed: true),

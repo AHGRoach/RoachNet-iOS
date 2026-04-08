@@ -57,11 +57,7 @@ struct CompanionConnectionSettings: Codable, Hashable, Sendable {
     }
 
     private static var defaultBaseURL: String {
-#if targetEnvironment(simulator)
-        "http://127.0.0.1:38111"
-#else
-        "http://192.168.1.10:38111"
-#endif
+        "http://RoachNet:38111"
     }
 
     func save() {
@@ -308,6 +304,27 @@ struct RoachNetAPIClient {
 
         return try await request(
             "/api/companion/roachtail/affect",
+            method: "POST",
+            body: body,
+            using: connection
+        )
+    }
+
+    func affectRoachSync(
+        action: String,
+        folderPath: String? = nil,
+        using connection: CompanionConnectionSettings
+    ) async throws -> CompanionActionResponse {
+        var body: [String: Any] = [
+            "action": action,
+        ]
+
+        if let folderPath, !folderPath.isEmpty {
+            body["folderPath"] = folderPath
+        }
+
+        return try await request(
+            "/api/companion/roachsync/affect",
             method: "POST",
             body: body,
             using: connection

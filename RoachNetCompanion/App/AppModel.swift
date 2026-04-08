@@ -36,6 +36,7 @@ final class CompanionAppModel {
     var installingItemIDs = Set<String>()
     var actingServiceNames = Set<String>()
     var isActingRoachTail = false
+    var isActingRoachSync = false
     var bannerText: String?
     var errorText: String?
     var historyPresented = false
@@ -60,7 +61,7 @@ final class CompanionAppModel {
 
         if forceDemoMode {
             connection = CompanionConnectionSettings(
-                baseURL: "http://127.0.0.1:38111",
+                baseURL: "http://RoachNet:38111",
                 token: "preview-lane"
             )
         }
@@ -569,6 +570,7 @@ final class CompanionAppModel {
                     providers: runtime?.providers ?? CompanionProviderEnvelope(providers: [:]),
                     roachClaw: runtime?.roachClaw ?? CompanionDemoState.runtime.roachClaw,
                     roachTail: existing,
+                    roachSync: runtime?.roachSync ?? CompanionDemoState.runtime.roachSync,
                     services: runtime?.services ?? [],
                     downloads: runtime?.downloads ?? [],
                     installedModels: runtime?.installedModels ?? [],
@@ -580,6 +582,34 @@ final class CompanionAppModel {
             await refreshAll()
         } catch {
             errorText = error.localizedDescription
+        }
+    }
+
+    func applyRoachTailPairingPayload(_ rawPayload: String) {
+        let trimmedPayload = rawPayload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPayload.isEmpty, let payloadData = trimmedPayload.data(using: .utf8) else {
+            errorText = "That QR code did not contain RoachTail pairing data."
+            return
+        }
+
+        do {
+            let payload = try JSONDecoder().decode(CompanionRoachTailPairingPayload.self, from: payloadData)
+
+            if let bridgeURL = payload.bridgeUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !bridgeURL.isEmpty {
+                connection.baseURL = bridgeURL
+            } else if let runtimeTunnelURL = payload.runtimeTunnelUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !runtimeTunnelURL.isEmpty {
+                connection.baseURL = runtimeTunnelURL
+            } else if let runtimeOrigin = payload.runtimeOrigin?.trimmingCharacters(in: .whitespacesAndNewlines), !runtimeOrigin.isEmpty {
+                connection.baseURL = runtimeOrigin
+            }
+
+            connection.pairCode = payload.joinCode
+            connection.token = ""
+            connection.save()
+            bannerText = "RoachTail pairing data loaded."
+            errorText = nil
+        } catch {
+            errorText = "That QR code was not a valid RoachTail pairing payload."
         }
     }
 
@@ -598,6 +628,32 @@ final class CompanionAppModel {
             bannerText = result.message ?? "RoachTail updated."
             errorText = nil
             try await refreshRuntimeAfterRoachTailAction()
+        } catch {
+            errorText = error.localizedDescription
+        }
+    }
+
+    func affectRoachSync(_ action: String, folderPath: String? = nil) async {
+        guard connection.isConfigured else {
+            settingsPresented = true
+            errorText = "Link your Mac companion lane before changing RoachSync."
+            return
+        }
+
+        isActingRoachSync = true
+        defer { isActingRoachSync = false }
+
+        do {
+            let result = try await client.affectRoachSync(
+                action: action,
+                folderPath: folderPath,
+                using: connection
+            )
+            bannerText = result.message ?? "RoachSync updated."
+            errorText = nil
+            runtime = try await client.runtime(using: connection)
+            lastRefreshAt = Date()
+            persistCache()
         } catch {
             errorText = error.localizedDescription
         }
@@ -726,7 +782,7 @@ final class CompanionAppModel {
     }
 
     private var currentAppVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.1"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.2"
     }
 
     private func queueInstall(_ title: String, intent: StoreInstallIntent) {
@@ -807,6 +863,7 @@ final class CompanionAppModel {
             providers: existing.providers,
             roachClaw: existing.roachClaw,
             roachTail: status,
+            roachSync: existing.roachSync,
             services: existing.services,
             downloads: existing.downloads,
             installedModels: existing.installedModels,
