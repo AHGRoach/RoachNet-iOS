@@ -10,7 +10,9 @@ struct RuntimeView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        overviewPanel
                         connectionPanel
+                        accountPanel
                         roachTailPanel
                         roachSyncPanel
                         machinePanel
@@ -25,13 +27,206 @@ struct RuntimeView: View {
                     await model.refreshAll()
                 }
             }
-            .navigationTitle("Runtime")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await model.refreshAll() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
+            .navigationBarHidden(true)
+        }
+    }
+
+    private var overviewPanel: some View {
+        RoachHeroPanel(accent: RoachTheme.secondary) {
+            VStack(alignment: .leading, spacing: 16) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                RoachSectionHeader(
+                                    eyebrow: "Runtime",
+                                    title: "Contained stack. No mystery boxes.",
+                                    detail: "RoachTail, RoachSync, account state, and the local runtime stay in one control surface."
+                                )
+
+                                if let lastRefreshAt = model.lastRefreshAt {
+                                    Text("Last sync \(formattedRelativeDate(lastRefreshAt))")
+                                        .font(.caption)
+                                        .foregroundStyle(RoachTheme.subduedText)
+                                }
+                            }
+
+                            runtimePills
+                        }
+
+                        Spacer(minLength: 12)
+
+                        VStack(alignment: .trailing, spacing: 12) {
+                            Button {
+                                Task { await model.refreshAll() }
+                            } label: {
+                                Label("Refresh", systemImage: "arrow.clockwise")
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(RoachTheme.secondary)
+
+                            runtimeSignals
+                                .frame(width: 280, alignment: .trailing)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            RoachSectionHeader(
+                                eyebrow: "Runtime",
+                                title: "Contained stack. No mystery boxes.",
+                                detail: "RoachTail, RoachSync, account state, and the local runtime stay in one control surface."
+                            )
+
+                            if let lastRefreshAt = model.lastRefreshAt {
+                                Text("Last sync \(formattedRelativeDate(lastRefreshAt))")
+                                    .font(.caption)
+                                    .foregroundStyle(RoachTheme.subduedText)
+                            }
+                        }
+
+                        runtimePills
+                        runtimeSignals
+
+                        Button {
+                            Task { await model.refreshAll() }
+                        } label: {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(RoachTheme.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var runtimePills: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                RoachStatusPill(
+                    title: model.runtime?.account?.linked == true ? "Account linked" : "Account local",
+                    accent: model.runtime?.account?.linked == true ? RoachTheme.tertiary : RoachTheme.primary
+                )
+                RoachStatusPill(
+                    title: model.runtime?.roachTail?.enabled == true ? "RoachTail armed" : "RoachTail off",
+                    accent: model.runtime?.roachTail?.enabled == true ? RoachTheme.secondary : RoachTheme.primary
+                )
+                RoachStatusPill(
+                    title: model.runtime?.roachSync?.enabled == true ? "RoachSync armed" : "RoachSync off",
+                    accent: model.runtime?.roachSync?.enabled == true ? RoachTheme.secondary : RoachTheme.primary
+                )
+                RoachStatusPill(
+                    title: model.connection.isConfigured ? "Bridge ready" : "Bridge local-only",
+                    accent: model.connection.isConfigured ? RoachTheme.tertiary : RoachTheme.primary
+                )
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    private var runtimeSignals: some View {
+        let hasLiveService = model.runtime?.services.contains(where: {
+            ($0.status ?? "").localizedCaseInsensitiveContains("live") ||
+            ($0.status ?? "").localizedCaseInsensitiveContains("running")
+        }) == true
+
+        return LazyVGrid(
+            columns: [
+                GridItem(.flexible(minimum: 0), spacing: 10),
+                GridItem(.flexible(minimum: 0), spacing: 10),
+            ],
+            alignment: .leading,
+            spacing: 10
+        ) {
+            RoachSignalTile(
+                label: "Runtime",
+                value: hasLiveService ? "Live" : "Local",
+                accent: hasLiveService ? RoachTheme.secondary : RoachTheme.primary,
+                systemImage: "switch.2"
+            )
+            RoachSignalTile(
+                label: "Services",
+                value: "\(model.runtime?.services.count ?? 0)",
+                accent: RoachTheme.tertiary,
+                systemImage: "server.rack"
+            )
+            RoachSignalTile(
+                label: "Downloads",
+                value: "\(model.runtime?.downloads.count ?? 0)",
+                accent: RoachTheme.primary,
+                systemImage: "arrow.down.circle"
+            )
+            RoachSignalTile(
+                label: "Issues",
+                value: "\(model.runtimeIssues.count)",
+                accent: model.runtimeIssues.isEmpty ? RoachTheme.secondary : RoachTheme.primary,
+                systemImage: "exclamationmark.triangle"
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var accountPanel: some View {
+        if let account = model.runtime?.account {
+            RoachPanel {
+                VStack(alignment: .leading, spacing: 12) {
+                    RoachSectionHeader(
+                        eyebrow: "Account",
+                        title: account.linked ? "Account lane is linked." : "Account lane is still local-only.",
+                        detail: "RoachClaw web chat, synced settings, and saved app picks can ride the same contained identity."
+                    )
+
+                    RoachMetricRow {
+                        RoachMetricTile(
+                            label: "State",
+                            value: account.status.capitalized,
+                            accent: account.linked ? RoachTheme.secondary : RoachTheme.primary
+                        )
+
+                        RoachMetricTile(
+                            label: "Settings",
+                            value: account.settingsSyncEnabled ? "Synced" : "Local",
+                            accent: account.settingsSyncEnabled ? RoachTheme.tertiary : RoachTheme.primary
+                        )
+
+                        RoachMetricTile(
+                            label: "Apps",
+                            value: account.savedAppsSyncEnabled ? "Synced" : "Local",
+                            accent: account.savedAppsSyncEnabled ? RoachTheme.tertiary : RoachTheme.primary
+                        )
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Alias")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RoachTheme.secondary)
+                        Text(account.aliasHost)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(RoachTheme.text)
+                    }
+
+                    if let bridgeUrl = account.bridgeUrl, !bridgeUrl.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Bridge")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RoachTheme.secondary)
+                            Text(bridgeUrl)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(RoachTheme.text)
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    if !account.notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(account.notes.prefix(3), id: \.self) { note in
+                                Text(note)
+                                    .font(.caption)
+                                    .foregroundStyle(RoachTheme.subduedText)
+                            }
+                        }
                     }
                 }
             }
@@ -49,7 +244,7 @@ struct RuntimeView: View {
                         detail: "RoachTail is the private overlay for mobile control, chat carryover, and remote installs."
                     )
 
-                    HStack(spacing: 10) {
+                    RoachMetricRow {
                         RoachMetricTile(
                             label: "Network",
                             value: roachTail.networkName,
@@ -70,7 +265,39 @@ struct RuntimeView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 10) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 10) {
+                                roachTailToggle(roachTail)
+
+                                if !model.usingRoachTailPeerToken {
+                                    Button {
+                                        Task { await model.affectRoachTail("refresh-join-code") }
+                                    } label: {
+                                        Text("Refresh code")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(model.isActingRoachTail || !roachTail.enabled)
+                                }
+                            }
+
+                            VStack(spacing: 10) {
+                                roachTailToggle(roachTail)
+
+                                if !model.usingRoachTailPeerToken {
+                                    Button {
+                                        Task { await model.affectRoachTail("refresh-join-code") }
+                                    } label: {
+                                        Text("Refresh code")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(model.isActingRoachTail || !roachTail.enabled)
+                                }
+                            }
+                        }
+
+                        ViewThatFits(in: .horizontal) {
                             Toggle(
                                 isOn: Binding(
                                     get: { model.runtime?.roachTail?.enabled ?? false },
@@ -94,43 +321,66 @@ struct RuntimeView: View {
                             .tint(RoachTheme.secondary)
                             .disabled(model.isActingRoachTail)
 
-                            if !model.usingRoachTailPeerToken {
+                            VStack(alignment: .leading, spacing: 10) {
+                                roachTailToggle(roachTail)
+                            }
+                        }
+
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 10) {
                                 Button {
-                                    Task { await model.affectRoachTail("refresh-join-code") }
+                                    Task {
+                                        if model.roachTailIsLinked {
+                                            await model.unlinkThisDeviceFromRoachTail()
+                                        } else {
+                                            await model.linkThisDeviceToRoachTail()
+                                        }
+                                    }
                                 } label: {
-                                    Text("Refresh code")
+                                    Text(model.roachTailIsLinked ? "Unlink this device" : "Link this device")
                                         .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.bordered)
                                 .disabled(model.isActingRoachTail || !roachTail.enabled)
-                            }
-                        }
 
-                        HStack(spacing: 10) {
-                            Button {
-                                Task {
-                                    if model.roachTailIsLinked {
-                                        await model.unlinkThisDeviceFromRoachTail()
-                                    } else {
-                                        await model.linkThisDeviceToRoachTail()
+                                if !model.usingRoachTailPeerToken {
+                                    Button {
+                                        Task { await model.affectRoachTail("clear-peers") }
+                                    } label: {
+                                        Text("Clear peers")
+                                            .frame(maxWidth: .infinity)
                                     }
+                                    .buttonStyle(.bordered)
+                                    .disabled(model.isActingRoachTail || roachTail.peers.isEmpty)
                                 }
-                            } label: {
-                                Text(model.roachTailIsLinked ? "Unlink this device" : "Link this device")
-                                    .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(.bordered)
-                            .disabled(model.isActingRoachTail || !roachTail.enabled)
 
-                            if !model.usingRoachTailPeerToken {
+                            VStack(spacing: 10) {
                                 Button {
-                                    Task { await model.affectRoachTail("clear-peers") }
+                                    Task {
+                                        if model.roachTailIsLinked {
+                                            await model.unlinkThisDeviceFromRoachTail()
+                                        } else {
+                                            await model.linkThisDeviceToRoachTail()
+                                        }
+                                    }
                                 } label: {
-                                    Text("Clear peers")
+                                    Text(model.roachTailIsLinked ? "Unlink this device" : "Link this device")
                                         .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.bordered)
-                                .disabled(model.isActingRoachTail || roachTail.peers.isEmpty)
+                                .disabled(model.isActingRoachTail || !roachTail.enabled)
+
+                                if !model.usingRoachTailPeerToken {
+                                    Button {
+                                        Task { await model.affectRoachTail("clear-peers") }
+                                    } label: {
+                                        Text("Clear peers")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(model.isActingRoachTail || roachTail.peers.isEmpty)
+                                }
                             }
                         }
                     }
@@ -220,7 +470,7 @@ struct RuntimeView: View {
                         detail: "RoachSync keeps the vault and future shared state grouped under one private sync lane."
                     )
 
-                    HStack(spacing: 10) {
+                    RoachMetricRow {
                         RoachMetricTile(
                             label: "Network",
                             value: roachSync.networkName,
@@ -264,24 +514,46 @@ struct RuntimeView: View {
                         .tint(RoachTheme.secondary)
                         .disabled(model.isActingRoachSync)
 
-                        HStack(spacing: 10) {
-                            Button {
-                                Task { await model.affectRoachSync("refresh") }
-                            } label: {
-                                Text("Refresh sync")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(model.isActingRoachSync)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 10) {
+                                Button {
+                                    Task { await model.affectRoachSync("refresh") }
+                                } label: {
+                                    Text("Refresh sync")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(model.isActingRoachSync)
 
-                            Button {
-                                Task { await model.affectRoachSync("clear-peers") }
-                            } label: {
-                                Text("Clear peers")
-                                    .frame(maxWidth: .infinity)
+                                Button {
+                                    Task { await model.affectRoachSync("clear-peers") }
+                                } label: {
+                                    Text("Clear peers")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(model.isActingRoachSync || roachSync.peers.isEmpty)
                             }
-                            .buttonStyle(.bordered)
-                            .disabled(model.isActingRoachSync || roachSync.peers.isEmpty)
+
+                            VStack(spacing: 10) {
+                                Button {
+                                    Task { await model.affectRoachSync("refresh") }
+                                } label: {
+                                    Text("Refresh sync")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(model.isActingRoachSync)
+
+                                Button {
+                                    Task { await model.affectRoachSync("clear-peers") }
+                                } label: {
+                                    Text("Clear peers")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(model.isActingRoachSync || roachSync.peers.isEmpty)
+                            }
                         }
                     }
 
@@ -345,7 +617,7 @@ struct RuntimeView: View {
                     detail: "Runtime status, service controls, and RoachClaw all run through the same companion bridge."
                 )
 
-                HStack(spacing: 10) {
+                RoachMetricRow {
                     RoachMetricTile(
                         label: "URL",
                         value: model.connection.baseURL,
@@ -389,7 +661,7 @@ struct RuntimeView: View {
                     detail: model.runtime?.systemInfo?.hardwareProfile?.recommendedModelClass ?? "Model guidance is not available yet."
                 )
 
-                HStack(spacing: 10) {
+                RoachMetricRow {
                     if let available = model.runtime?.systemInfo?.mem?.available {
                         RoachMetricTile(
                             label: "Memory",
@@ -427,7 +699,7 @@ struct RuntimeView: View {
                     detail: model.runtime?.roachClaw.error ?? "Model selection, installed packs, and provider state all show here."
                 )
 
-                HStack(spacing: 10) {
+                RoachMetricRow {
                     RoachMetricTile(
                         label: "State",
                         value: (model.runtime?.roachClaw.ready ?? false) ? "Ready" : "Booting",
@@ -582,5 +854,30 @@ struct RuntimeView: View {
         .buttonStyle(.bordered)
         .tint(action == "stop" ? RoachTheme.primary : RoachTheme.secondary)
         .disabled(model.actingServiceNames.contains(service))
+    }
+
+    private func roachTailToggle(_ roachTail: CompanionRoachTailStatus) -> some View {
+        Toggle(
+            isOn: Binding(
+                get: { model.runtime?.roachTail?.enabled ?? false },
+                set: { nextValue in
+                    Task {
+                        await model.affectRoachTail(nextValue ? "enable" : "disable")
+                    }
+                }
+            )
+        ) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("RoachTail")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RoachTheme.text)
+                Text(roachTail.enabled ? "Private overlay is armed." : "Private overlay is off.")
+                    .font(.caption)
+                    .foregroundStyle(RoachTheme.subduedText)
+            }
+        }
+        .toggleStyle(.switch)
+        .tint(RoachTheme.secondary)
+        .disabled(model.isActingRoachTail)
     }
 }

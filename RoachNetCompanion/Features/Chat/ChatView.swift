@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ChatView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Bindable var model: CompanionAppModel
     @FocusState private var composerFocused: Bool
 
@@ -14,6 +15,22 @@ struct ChatView: View {
         ]
     }
 
+    private var headerDetail: String {
+        if let title = model.currentSession?.title, !title.isEmpty {
+            return title
+        }
+
+        if model.runtime?.account?.linked == true {
+            return "Your account keeps the hosted chat lane open, while the local bridge stays opt-in."
+        }
+
+        if model.pairedMachineName != nil {
+            return "Paired to your desktop, with cached state kept close on the phone."
+        }
+
+        return "Chat, queue installs, and keep cached context even when the Mac is asleep or nowhere nearby."
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -25,7 +42,8 @@ struct ChatView: View {
                     content
                     composer
                 }
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
             }
             .navigationBarHidden(true)
             .sheet(isPresented: Binding(
@@ -38,89 +56,187 @@ struct ChatView: View {
     }
 
     private var header: some View {
-        RoachPanel {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        RoachSectionHeader(
-                            eyebrow: "RoachClaw",
-                            title: model.connection.isConfigured ? "Carry the Mac lane with you." : "Keep the phone lane alive.",
-                            detail: model.currentSession?.title
-                                ?? model.pairedMachineName.map { _ in "Linked to your desktop." }
-                                ?? "Chat, queue installs, and read cached state even when the desktop is out of reach."
-                        )
-
-                        if let lastRefreshAt = model.lastRefreshAt {
-                            Text("Last sync \(formattedRelativeDate(lastRefreshAt))")
-                                .font(.caption)
-                                .foregroundStyle(RoachTheme.subduedText)
+        RoachHeroPanel(accent: RoachTheme.primary) {
+            VStack(alignment: .leading, spacing: 16) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            headerCopy
+                            heroPills
                         }
+
+                        Spacer(minLength: 12)
+
+                        VStack(alignment: .trailing, spacing: 12) {
+                            headerButtons
+                            heroSignals
+                        }
+                        .frame(width: 280, alignment: .trailing)
                     }
 
-                    Spacer(minLength: 12)
-
-                    HStack(spacing: 10) {
-                        Button {
-                            model.settingsPresented = true
-                        } label: {
-                            Image(systemName: "slider.horizontal.3")
-                                .font(.headline)
-                        }
-                        .buttonStyle(.bordered)
+                    VStack(alignment: .leading, spacing: 14) {
+                        headerCopy
+                        heroPills
+                        heroSignals
+                        headerButtons
                     }
-                    .tint(RoachTheme.secondary)
                 }
 
+                quickActions
+            }
+        }
+    }
+
+    private var headerCopy: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            RoachSectionHeader(
+                eyebrow: "RoachClaw",
+                title: model.connection.isConfigured ? "Your chat, not one device." : "Offline first. Pair when needed.",
+                detail: headerDetail
+            )
+
+            if let lastRefreshAt = model.lastRefreshAt {
+                Text("Last sync \(formattedRelativeDate(lastRefreshAt))")
+                    .font(.caption)
+                    .foregroundStyle(RoachTheme.subduedText)
+            }
+        }
+    }
+
+    private var headerButtons: some View {
+        HStack(spacing: 10) {
+            if model.connection.isConfigured {
+                Button {
+                    model.historyPresented = true
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.headline)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Button {
+                model.settingsPresented = true
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.headline)
+            }
+            .buttonStyle(.bordered)
+        }
+        .tint(RoachTheme.secondary)
+    }
+
+    private var heroPills: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                RoachStatusPill(
+                    title: model.connection.isConfigured ? "Paired device" : "Phone-only cache",
+                    accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary
+                )
+                RoachStatusPill(
+                    title: model.runtime?.account?.linked == true ? "Account linked" : "Account local",
+                    accent: model.runtime?.account?.linked == true ? RoachTheme.tertiary : RoachTheme.primary
+                )
+                RoachStatusPill(
+                    title: model.runtime?.roachTail?.enabled == true ? "RoachTail armed" : "RoachTail off",
+                    accent: model.runtime?.roachTail?.enabled == true ? RoachTheme.secondary : RoachTheme.primary
+                )
+                RoachStatusPill(
+                    title: model.queuedInstallCount > 0 ? "\(model.queuedInstallCount) queued" : "Queue clear",
+                    accent: model.queuedInstallCount > 0 ? RoachTheme.primary : RoachTheme.tertiary
+                )
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    private var heroSignals: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(minimum: 0), spacing: 10),
+                GridItem(.flexible(minimum: 0), spacing: 10),
+            ],
+            alignment: .leading,
+            spacing: 10
+        ) {
+            RoachSignalTile(
+                label: "Mode",
+                value: model.connection.isConfigured ? model.connection.securityLabel : "Offline ready",
+                accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary,
+                systemImage: "shield.lefthalf.filled"
+            )
+
+            RoachSignalTile(
+                label: "Model",
+                value: model.activeModelName ?? "RoachBrain cache",
+                accent: RoachTheme.primary,
+                systemImage: "brain.head.profile"
+            )
+
+            RoachSignalTile(
+                label: "Threads",
+                value: "\(max(model.sessionList.count, model.currentSession == nil ? 0 : 1))",
+                accent: RoachTheme.tertiary,
+                systemImage: "text.bubble"
+            )
+
+            RoachSignalTile(
+                label: "Installs",
+                value: model.queuedInstallCount > 0 ? "\(model.queuedInstallCount) queued" : "Ready",
+                accent: model.queuedInstallCount > 0 ? RoachTheme.secondary : RoachTheme.tertiary,
+                systemImage: "square.and.arrow.down"
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var quickActions: some View {
+        if horizontalSizeClass == .compact {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(minimum: 0), spacing: 10),
+                    GridItem(.flexible(minimum: 0), spacing: 10),
+                ],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                quickActionItems
+            }
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    RoachMetricTile(
-                        label: "Link",
-                        value: model.connection.isConfigured ? "Live" : "Offline ready",
-                        accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary
-                    )
-
-                    RoachMetricTile(
-                        label: "Offline AI",
-                        value: "Ready",
-                        accent: RoachTheme.primary
-                    )
-
-                    RoachMetricTile(
-                        label: "Model",
-                        value: model.activeModelName ?? "Waiting for runtime",
-                        accent: RoachTheme.tertiary
-                    )
-                }
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        actionChip("New chat", systemImage: "square.and.pencil") {
-                            Task { await model.newChat() }
-                        }
-
-                        if model.connection.isConfigured {
-                            actionChip("History", systemImage: "clock.arrow.circlepath") {
-                                model.historyPresented = true
-                            }
-                        } else {
-                            actionChip("Link Mac", systemImage: "link") {
-                                model.settingsPresented = true
-                            }
-                        }
-
-                        actionChip("Runtime", systemImage: "switch.2") {
-                            model.selectedTab = .runtime
-                        }
-
-                        actionChip("Apps", systemImage: "square.grid.2x2.fill") {
-                            model.selectedTab = .apps
-                        }
-
-                        actionChip("Vault", systemImage: "archivebox.fill") {
-                            model.selectedTab = .vault
-                        }
-                    }
+                    quickActionItems
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var quickActionItems: some View {
+        actionChip("New chat", systemImage: "square.and.pencil", accent: RoachTheme.primary) {
+            Task { await model.newChat() }
+        }
+
+        if model.connection.isConfigured {
+            actionChip("History", systemImage: "clock.arrow.circlepath", accent: RoachTheme.secondary) {
+                model.historyPresented = true
+            }
+        } else {
+            actionChip("Link Mac", systemImage: "link", accent: RoachTheme.secondary) {
+                model.settingsPresented = true
+            }
+        }
+
+        actionChip("Runtime", systemImage: "switch.2", accent: RoachTheme.tertiary) {
+            model.selectedTab = .runtime
+        }
+
+        actionChip("Apps", systemImage: "square.grid.2x2.fill", accent: RoachTheme.primary) {
+            model.selectedTab = .apps
+        }
+
+        actionChip("Vault", systemImage: "archivebox.fill", accent: RoachTheme.secondary) {
+            model.selectedTab = .vault
         }
     }
 
@@ -235,7 +351,16 @@ struct ChatView: View {
     }
 
     private var suggestionGrid: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        LazyVGrid(
+            columns: horizontalSizeClass == .compact
+                ? [GridItem(.flexible(minimum: 0), spacing: 10)]
+                : [
+                    GridItem(.flexible(minimum: 0), spacing: 10),
+                    GridItem(.flexible(minimum: 0), spacing: 10),
+                ],
+            alignment: .leading,
+            spacing: 10
+        ) {
             ForEach(promptSuggestions, id: \.self) { suggestion in
                 Button {
                     model.draft = suggestion
@@ -250,6 +375,7 @@ struct ChatView: View {
                             .multilineTextAlignment(.leading)
                         Spacer(minLength: 0)
                     }
+                    .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
                     .padding(14)
                     .background(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -267,48 +393,93 @@ struct ChatView: View {
 
     private var composer: some View {
         RoachPanel {
-            HStack(alignment: .bottom, spacing: 12) {
-                TextField("Message RoachClaw or the offline lane", text: $model.draft, axis: .vertical)
-                    .focused($composerFocused)
-                    .textInputAutocapitalization(.sentences)
-                    .lineLimit(1...6)
-                    .padding(12)
-                    .background(RoachTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    RoachSectionHeader(
+                        eyebrow: "Composer",
+                        title: "Ask something useful.",
+                        detail: model.connection.isConfigured
+                            ? "The paired stack will answer first. Cached context is still here if the bridge drops."
+                            : "This stays useful even without a live desktop bridge."
+                    )
 
-                Button {
-                    Task {
-                        await model.sendDraft()
+                    Spacer(minLength: 12)
+                }
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .bottom, spacing: 12) {
+                        composerField
+                        composerSendButton
                     }
-                } label: {
-                    if model.isSending {
-                        ProgressView()
-                            .tint(Color.white)
-                            .frame(width: 28, height: 28)
-                    } else {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 30))
+
+                    VStack(spacing: 12) {
+                        composerField
+                        composerSendButton
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 }
-                .foregroundStyle(Color.white)
-                .disabled(model.isSending || model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
+        .padding(.bottom, 4)
     }
 
-    private func actionChip(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(RoachTheme.elevatedSurface.opacity(0.92))
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .strokeBorder(RoachTheme.border, lineWidth: 1)
+    private var composerField: some View {
+        TextField("Message RoachClaw or the offline cache", text: $model.draft, axis: .vertical)
+            .focused($composerFocused)
+            .textInputAutocapitalization(.sentences)
+            .lineLimit(1...6)
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(RoachTheme.elevatedSurface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(RoachTheme.border, lineWidth: 1)
+                    )
+            )
+    }
+
+    private var composerSendButton: some View {
+        Button {
+            Task {
+                await model.sendDraft()
+            }
+        } label: {
+            HStack(spacing: 10) {
+                if model.isSending {
+                    ProgressView()
+                        .tint(Color.white)
+                        .frame(width: 20, height: 20)
+                } else {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                }
+
+                Text(model.isSending ? "Sending" : "Send")
+                    .font(.subheadline.weight(.bold))
+            }
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [RoachTheme.primary, RoachTheme.secondary.opacity(0.76)],
+                            startPoint: .leading,
+                            endPoint: .trailing
                         )
-                )
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isSending || model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .opacity(model.isSending || model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.62 : 1)
+    }
+
+    private func actionChip(_ title: String, systemImage: String, accent: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            RoachActionPill(title: title, systemImage: systemImage, accent: accent)
         }
         .buttonStyle(.plain)
         .foregroundStyle(RoachTheme.text)

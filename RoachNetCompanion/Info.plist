@@ -20,11 +20,24 @@
   <string>0.1.2</string>
   <key>CFBundleVersion</key>
   <string>2</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>CFBundleURLName</key>
+      <string>org.roachnet.ios</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>roachnet</string>
+      </array>
+    </dict>
+  </array>
   <key>LSRequiresIPhoneOS</key>
   <true/>
   <key>NSAppTransportSecurity</key>
   <dict>
-    <key>NSAllowsArbitraryLoads</key>
+    <key>NSAllowsLocalNetworking</key>
     <true/>
   </dict>
   <key>NSCameraUsageDescription</key>

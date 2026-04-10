@@ -11,6 +11,7 @@ struct AppsView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        storeHeader
                         featuredCard
                         searchField
                         categoryStrip
@@ -30,7 +31,7 @@ struct AppsView: View {
                     }
                 }
             }
-            .navigationTitle("Apps")
+            .navigationBarHidden(true)
             .sheet(item: Binding(
                 get: { model.selectedStoreItem },
                 set: { model.selectedStoreItem = $0 }
@@ -40,47 +41,252 @@ struct AppsView: View {
         }
     }
 
+    private var storeHeader: some View {
+        RoachHeroPanel(accent: RoachTheme.tertiary) {
+            VStack(alignment: .leading, spacing: 14) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            RoachSectionHeader(
+                                eyebrow: "Apps",
+                                title: "The same shelf as the web store.",
+                                detail: "Curated maps, courses, models, and references, with the same RoachNet install handoff the desktop already understands."
+                            )
+
+                            appPills
+                        }
+
+                        Spacer(minLength: 12)
+
+                        VStack(alignment: .trailing, spacing: 12) {
+                            Button {
+                                model.selectedTab = .chat
+                            } label: {
+                                Label("Chat", systemImage: "message.fill")
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(RoachTheme.secondary)
+
+                            appSignals
+                                .frame(width: 280, alignment: .trailing)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        RoachSectionHeader(
+                            eyebrow: "Apps",
+                            title: "The same shelf as the web store.",
+                            detail: "Curated maps, courses, models, and references, with the same RoachNet install handoff the desktop already understands."
+                        )
+
+                        appPills
+                        appSignals
+
+                        Button {
+                            model.selectedTab = .chat
+                        } label: {
+                            Label("Jump to chat", systemImage: "message.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(RoachTheme.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var appPills: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                RoachStatusPill(
+                    title: model.connection.isConfigured ? "Install bridge ready" : "Link Mac to install",
+                    accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary
+                )
+                RoachStatusPill(
+                    title: model.favoriteItems.isEmpty ? "No saved picks" : "\(model.favoriteItems.count) saved",
+                    accent: model.favoriteItems.isEmpty ? RoachTheme.primary : RoachTheme.tertiary
+                )
+                RoachStatusPill(
+                    title: model.queuedInstallCount > 0 ? "\(model.queuedInstallCount) queued" : "Queue clear",
+                    accent: model.queuedInstallCount > 0 ? RoachTheme.primary : RoachTheme.secondary
+                )
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    private var appSignals: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(minimum: 0), spacing: 10),
+                GridItem(.flexible(minimum: 0), spacing: 10),
+            ],
+            alignment: .leading,
+            spacing: 10
+        ) {
+            RoachSignalTile(
+                label: "Visible",
+                value: "\(model.visibleCatalogItems.count)",
+                accent: RoachTheme.tertiary,
+                systemImage: "square.grid.2x2"
+            )
+            RoachSignalTile(
+                label: "Saved",
+                value: "\(model.favoriteItems.count)",
+                accent: RoachTheme.primary,
+                systemImage: "heart"
+            )
+            RoachSignalTile(
+                label: "Queue",
+                value: "\(model.queuedInstallCount)",
+                accent: model.queuedInstallCount > 0 ? RoachTheme.secondary : RoachTheme.tertiary,
+                systemImage: "tray.full"
+            )
+            RoachSignalTile(
+                label: "Link",
+                value: model.connection.isConfigured ? "Ready" : "Pair first",
+                accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary,
+                systemImage: "link"
+            )
+        }
+    }
+
     private var featuredCard: some View {
         let item = model.featuredItem
         return RoachPanel {
             if let item {
                 VStack(alignment: .leading, spacing: 14) {
-                    HStack(alignment: .top) {
-                        StoreGlyph(
-                            band: item.iconBand ?? "RoachNet",
-                            monogram: item.iconMonogram ?? "APP",
-                            accent: roachAccentColor(for: item.accent)
-                        )
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 16) {
+                            VStack(alignment: .leading, spacing: 14) {
+                                HStack(alignment: .top) {
+                                    StoreGlyph(
+                                        band: item.iconBand ?? "RoachNet",
+                                        monogram: item.iconMonogram ?? "APP",
+                                        accent: roachAccentColor(for: item.accent)
+                                    )
 
-                        Spacer()
+                                    Spacer()
 
-                        VStack(alignment: .trailing, spacing: 8) {
-                            favoriteButton(for: item)
-                            RoachBadge(title: model.connection.isConfigured ? "Install-ready" : "Link Mac first", accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary)
-                            if let status = item.status {
-                                RoachBadge(title: status, accent: roachAccentColor(for: item.accent))
+                                    favoriteButton(for: item)
+                                }
+
+                                RoachSectionHeader(
+                                    eyebrow: "Today",
+                                    title: item.title,
+                                    detail: item.summary
+                                )
+
+                                ViewThatFits(in: .horizontal) {
+                                    HStack(spacing: 10) {
+                                        Button(item.installLabel ?? "Install to RoachNet") {
+                                            Task { await model.install(item) }
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(RoachTheme.primary)
+
+                                        Button("Preview") {
+                                            model.selectedStoreItem = item
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .tint(RoachTheme.secondary)
+                                    }
+
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        Button(item.installLabel ?? "Install to RoachNet") {
+                                            Task { await model.install(item) }
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(RoachTheme.primary)
+
+                                        Button("Preview") {
+                                            model.selectedStoreItem = item
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .tint(RoachTheme.secondary)
+                                    }
+                                }
+                            }
+
+                            VStack(alignment: .leading, spacing: 10) {
+                                RoachSignalTile(
+                                    label: "Category",
+                                    value: item.category,
+                                    accent: roachAccentColor(for: item.accent),
+                                    systemImage: "square.stack.3d.up"
+                                )
+                                RoachSignalTile(
+                                    label: "Size",
+                                    value: item.size ?? "Unknown",
+                                    accent: RoachTheme.tertiary,
+                                    systemImage: "externaldrive"
+                                )
+                                RoachSignalTile(
+                                    label: "State",
+                                    value: item.status ?? (model.connection.isConfigured ? "Install-ready" : "Link Mac first"),
+                                    accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary,
+                                    systemImage: "arrow.down.circle"
+                                )
                             }
                         }
-                    }
 
-                    RoachSectionHeader(
-                        eyebrow: "Today",
-                        title: item.title,
-                        detail: item.summary
-                    )
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack(alignment: .top) {
+                                StoreGlyph(
+                                    band: item.iconBand ?? "RoachNet",
+                                    monogram: item.iconMonogram ?? "APP",
+                                    accent: roachAccentColor(for: item.accent)
+                                )
 
-                    HStack(spacing: 10) {
-                        Button(item.installLabel ?? "Install to RoachNet") {
-                            Task { await model.install(item) }
+                                Spacer()
+
+                                favoriteButton(for: item)
+                            }
+
+                            RoachSectionHeader(
+                                eyebrow: "Today",
+                                title: item.title,
+                                detail: item.summary
+                            )
+
+                            HStack(spacing: 8) {
+                                RoachBadge(title: item.category, accent: roachAccentColor(for: item.accent))
+                                if let status = item.status {
+                                    RoachBadge(title: status, accent: RoachTheme.secondary)
+                                }
+                            }
+
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: 10) {
+                                    Button(item.installLabel ?? "Install to RoachNet") {
+                                        Task { await model.install(item) }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(RoachTheme.primary)
+
+                                    Button("Preview") {
+                                        model.selectedStoreItem = item
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(RoachTheme.secondary)
+                                }
+
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Button(item.installLabel ?? "Install to RoachNet") {
+                                        Task { await model.install(item) }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(RoachTheme.primary)
+
+                                    Button("Preview") {
+                                        model.selectedStoreItem = item
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(RoachTheme.secondary)
+                                }
+                            }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(RoachTheme.primary)
-
-                        Button("Preview") {
-                            model.selectedStoreItem = item
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(RoachTheme.secondary)
                     }
                 }
             } else {
@@ -95,15 +301,20 @@ struct AppsView: View {
     }
 
     private var searchField: some View {
-        TextField("Search apps, maps, courses, or models", text: $model.searchText)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .padding(14)
-            .background(RoachTheme.surface.opacity(0.96), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(RoachTheme.border, lineWidth: 1)
-            )
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(RoachTheme.secondary)
+
+            TextField("Search apps, maps, courses, or models", text: $model.searchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        }
+        .padding(14)
+        .background(RoachTheme.surface.opacity(0.96), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(RoachTheme.border, lineWidth: 1)
+        )
     }
 
     private var categoryStrip: some View {
@@ -144,7 +355,7 @@ struct AppsView: View {
                     detail: model.categoryDescription(for: model.selectedCategory)
                 )
 
-                HStack(spacing: 10) {
+                RoachMetricRow {
                     RoachMetricTile(
                         label: "Apps",
                         value: "\(model.appCount(for: model.selectedCategory))",

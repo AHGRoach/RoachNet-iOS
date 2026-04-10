@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 enum RoachNetAPIError: LocalizedError {
     case invalidBaseURL
@@ -9,7 +10,7 @@ enum RoachNetAPIError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidBaseURL:
-            return "The companion URL is not valid."
+            return "The companion URL must be HTTPS or a trusted local RoachNet lane."
         case .notConfigured:
             return "Add the Mac companion URL and token first."
         case .requestFailed(let message):
@@ -20,12 +21,176 @@ enum RoachNetAPIError: LocalizedError {
     }
 }
 
+private enum CompanionEndpointPolicy {
+    static func normalizedBaseURL(from rawValue: String) -> URL? {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, var components = URLComponents(string: trimmed) else {
+            return nil
+        }
+
+        guard let scheme = components.scheme?.lowercased(), let host = components.host?.lowercased(), !host.isEmpty else {
+            return nil
+        }
+
+        switch scheme {
+        case "https":
+            break
+        case "http":
+            guard isTrustedPlaintextHost(host) else { return nil }
+        default:
+            return nil
+        }
+
+        components.scheme = scheme
+        components.fragment = nil
+
+        if components.path.isEmpty {
+            components.path = "/"
+        }
+
+        return components.url
+    }
+
+    static func securityLabel(for connection: CompanionConnectionSettings) -> String {
+        guard let url = connection.resolvedBaseURL else {
+            return "Needs trusted lane"
+        }
+
+        if connection.usesRoachTailPeerToken {
+            return "RoachTail peer"
+        }
+
+        if url.scheme?.lowercased() == "https" {
+            return "Secure relay"
+        }
+
+        return "Local bridge"
+    }
+
+    static func securityDetail(for connection: CompanionConnectionSettings) -> String {
+        guard let url = connection.resolvedBaseURL else {
+            return "Use HTTPS or a trusted local RoachNet bridge URL."
+        }
+
+        if connection.usesRoachTailPeerToken {
+            return "This phone is paired over a peer-scoped RoachTail token instead of a shared desktop token."
+        }
+
+        if url.scheme?.lowercased() == "https" {
+            return "Traffic is pinned to an HTTPS relay lane."
+        }
+
+        return "Traffic stays on a trusted local companion lane."
+    }
+
+    private static func isTrustedPlaintextHost(_ host: String) -> Bool {
+        if ["roachnet", "localhost", "127.0.0.1", "::1"].contains(host) {
+            return true
+        }
+
+        if host.hasSuffix(".local") || host.hasSuffix(".home.arpa") || host.hasSuffix(".internal") || host.hasSuffix(".roachtail") || host.hasSuffix(".roachtail.local") {
+            return true
+        }
+
+        if isPrivateIPv4(host) || isPrivateIPv6(host) {
+            return true
+        }
+
+        return false
+    }
+
+    private static func isPrivateIPv4(_ host: String) -> Bool {
+        let octets = host.split(separator: ".").compactMap { Int($0) }
+        guard octets.count == 4 else { return false }
+
+        switch (octets[0], octets[1]) {
+        case (10, _), (127, _):
+            return true
+        case (169, 254):
+            return true
+        case (192, 168):
+            return true
+        case (172, 16...31):
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isPrivateIPv6(_ host: String) -> Bool {
+        let lowered = host.lowercased()
+        return lowered == "::1" || lowered.hasPrefix("fe80:") || lowered.hasPrefix("fd") || lowered.hasPrefix("fc")
+    }
+}
+
+private enum CompanionSecretStore {
+    private static let service = "org.roachnet.ios"
+    private static let account = "companion-token"
+
+    static func loadToken() -> String {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data, let token = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+
+        return token
+    }
+
+    static func saveToken(_ token: String) {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            deleteToken()
+            return
+        }
+
+        let encoded = Data(trimmed.utf8)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+
+        let attributes: [String: Any] = [
+            kSecValueData as String: encoded,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return
+        }
+
+        var create = query
+        attributes.forEach { create[$0.key] = $0.value }
+        SecItemAdd(create as CFDictionary, nil)
+    }
+
+    static func deleteToken() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+}
+
 struct CompanionConnectionSettings: Codable, Hashable, Sendable {
     var baseURL: String
     var token: String
     var pairCode: String
 
     static let storageKey = "RoachNetCompanionConnection"
+    static let recommendedBaseURL = "http://RoachNet:38111"
 
     private enum CodingKeys: String, CodingKey {
         case baseURL
@@ -34,38 +199,52 @@ struct CompanionConnectionSettings: Codable, Hashable, Sendable {
     }
 
     static func load() -> CompanionConnectionSettings {
+        let storedToken = CompanionSecretStore.loadToken()
         if
             let rawString = UserDefaults.standard.string(forKey: storageKey),
             let rawData = rawString.data(using: .utf8),
             let decoded = try? JSONDecoder().decode(CompanionConnectionSettings.self, from: rawData)
         {
-            return decoded
+            let token = storedToken.isEmpty ? decoded.token : storedToken
+            let migrated = CompanionConnectionSettings(baseURL: decoded.baseURL, token: token, pairCode: decoded.pairCode)
+            if storedToken.isEmpty, !decoded.token.isEmpty {
+                migrated.save()
+            }
+            return migrated
         }
 
         if
             let raw = UserDefaults.standard.data(forKey: storageKey),
             let decoded = try? JSONDecoder().decode(CompanionConnectionSettings.self, from: raw)
         {
-            return decoded
+            let token = storedToken.isEmpty ? decoded.token : storedToken
+            let migrated = CompanionConnectionSettings(baseURL: decoded.baseURL, token: token, pairCode: decoded.pairCode)
+            if storedToken.isEmpty, !decoded.token.isEmpty {
+                migrated.save()
+            }
+            return migrated
         }
 
         return CompanionConnectionSettings(
-            baseURL: defaultBaseURL,
-            token: "",
+            baseURL: recommendedBaseURL,
+            token: storedToken,
             pairCode: ""
         )
     }
 
-    private static var defaultBaseURL: String {
-        "http://RoachNet:38111"
-    }
-
     func save() {
+        CompanionSecretStore.saveToken(token)
+        var sanitized = self
+        sanitized.token = ""
         guard let encoded = try? JSONEncoder().encode(self) else {
             return
         }
 
-        UserDefaults.standard.set(encoded, forKey: Self.storageKey)
+        if let sanitizedEncoded = try? JSONEncoder().encode(sanitized) {
+            UserDefaults.standard.set(sanitizedEncoded, forKey: Self.storageKey)
+        } else {
+            UserDefaults.standard.set(encoded, forKey: Self.storageKey)
+        }
     }
 
     init(baseURL: String, token: String, pairCode: String = "") {
@@ -76,7 +255,7 @@ struct CompanionConnectionSettings: Codable, Hashable, Sendable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        baseURL = try container.decodeIfPresent(String.self, forKey: .baseURL) ?? Self.defaultBaseURL
+        baseURL = try container.decodeIfPresent(String.self, forKey: .baseURL) ?? Self.recommendedBaseURL
         token = try container.decodeIfPresent(String.self, forKey: .token) ?? ""
         pairCode = try container.decodeIfPresent(String.self, forKey: .pairCode) ?? ""
     }
@@ -97,9 +276,15 @@ struct CompanionConnectionSettings: Codable, Hashable, Sendable {
     }
 
     var resolvedBaseURL: URL? {
-        let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return URL(string: trimmed.hasSuffix("/") ? trimmed : "\(trimmed)/")
+        CompanionEndpointPolicy.normalizedBaseURL(from: baseURL)
+    }
+
+    var securityLabel: String {
+        CompanionEndpointPolicy.securityLabel(for: self)
+    }
+
+    var securityDetail: String {
+        CompanionEndpointPolicy.securityDetail(for: self)
     }
 }
 
@@ -111,15 +296,15 @@ struct RoachNetAPIClient {
         if let session {
             self.session = session
         } else {
-            let configuration = URLSessionConfiguration.default
-            configuration.requestCachePolicy = .returnCacheDataElseLoad
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
             configuration.timeoutIntervalForRequest = 18
             configuration.timeoutIntervalForResource = 30
             configuration.waitsForConnectivity = false
-            configuration.urlCache = URLCache(
-                memoryCapacity: 8 * 1024 * 1024,
-                diskCapacity: 32 * 1024 * 1024
-            )
+            configuration.urlCache = nil
+            configuration.httpCookieStorage = nil
+            configuration.httpShouldSetCookies = false
+            configuration.httpCookieAcceptPolicy = .never
             self.session = URLSession(configuration: configuration)
         }
         decoder = JSONDecoder()
@@ -140,6 +325,10 @@ struct RoachNetAPIClient {
 
     func roachTail(using connection: CompanionConnectionSettings) async throws -> CompanionRoachTailStatus {
         try await request("/api/companion/roachtail", using: connection)
+    }
+
+    func account(using connection: CompanionConnectionSettings) async throws -> CompanionAccountStatus {
+        try await request("/api/companion/account", using: connection)
     }
 
     func pairRoachTail(
@@ -325,6 +514,51 @@ struct RoachNetAPIClient {
 
         return try await request(
             "/api/companion/roachsync/affect",
+            method: "POST",
+            body: body,
+            using: connection
+        )
+    }
+
+    func affectAccount(
+        action: String,
+        accountId: String? = nil,
+        email: String? = nil,
+        displayName: String? = nil,
+        portalUrl: String? = nil,
+        settingsSyncEnabled: Bool? = nil,
+        savedAppsSyncEnabled: Bool? = nil,
+        hostedChatEnabled: Bool? = nil,
+        using connection: CompanionConnectionSettings
+    ) async throws -> CompanionActionResponse {
+        var body: [String: Any] = [
+            "action": action,
+        ]
+
+        if let accountId, !accountId.isEmpty {
+            body["accountId"] = accountId
+        }
+        if let email, !email.isEmpty {
+            body["email"] = email
+        }
+        if let displayName, !displayName.isEmpty {
+            body["displayName"] = displayName
+        }
+        if let portalUrl, !portalUrl.isEmpty {
+            body["portalUrl"] = portalUrl
+        }
+        if let settingsSyncEnabled {
+            body["settingsSyncEnabled"] = settingsSyncEnabled
+        }
+        if let savedAppsSyncEnabled {
+            body["savedAppsSyncEnabled"] = savedAppsSyncEnabled
+        }
+        if let hostedChatEnabled {
+            body["hostedChatEnabled"] = hostedChatEnabled
+        }
+
+        return try await request(
+            "/api/companion/account/affect",
             method: "POST",
             body: body,
             using: connection

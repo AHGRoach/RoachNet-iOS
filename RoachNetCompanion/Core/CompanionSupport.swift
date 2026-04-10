@@ -543,6 +543,28 @@ enum CompanionDemoState {
                 error: nil
             )
         ),
+        account: CompanionAccountStatus(
+            linked: true,
+            provider: "RoachNet Account",
+            portalUrl: "https://accounts.roachnet.org/",
+            accountId: "acct-demo-roach",
+            email: "roach@local.lane",
+            displayName: "Roach",
+            status: "linked",
+            settingsSyncEnabled: true,
+            savedAppsSyncEnabled: true,
+            hostedChatEnabled: true,
+            aliasHost: "RoachNet",
+            bridgeUrl: "https://bridge.roachtail.local/studio-mac",
+            runtimeOrigin: "http://RoachNet:38111",
+            linkedAt: Date().addingTimeInterval(-86_400),
+            lastSeenAt: Date().addingTimeInterval(-180),
+            lastUpdatedAt: Date().addingTimeInterval(-90),
+            notes: [
+                "This device is linked to the same account lane as the desktop build.",
+                "Web chat, saved app picks, and future synced settings can follow the same contained stack."
+            ]
+        ),
         roachTail: CompanionRoachTailStatus(
             enabled: true,
             networkName: "RoachTail",
@@ -571,7 +593,7 @@ enum CompanionDemoState {
                     name: "RoachNet iPhone",
                     platform: "iOS",
                     status: "online",
-                    endpoint: "100.84.0.12",
+                    endpoint: "RoachNet",
                     lastSeenAt: Date().addingTimeInterval(-42),
                     allowsExitNode: false,
                     tags: ["chat", "apps", "runtime"]
@@ -581,7 +603,7 @@ enum CompanionDemoState {
                     name: "RoachNet iPad",
                     platform: "iPadOS",
                     status: "standby",
-                    endpoint: "100.84.0.14",
+                    endpoint: "RoachNet",
                     lastSeenAt: Date().addingTimeInterval(-1_240),
                     allowsExitNode: false,
                     tags: ["vault", "notes"]

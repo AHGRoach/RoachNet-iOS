@@ -11,6 +11,10 @@ enum CompanionTab: Hashable {
 @MainActor
 @Observable
 final class CompanionAppModel {
+    static let accountPortalURL = URL(string: "https://accounts.roachnet.org/")!
+    static let apiDocsURL = URL(string: "https://roachnet.org/api/")!
+    static let roachClawWebURL = URL(string: "https://roachnet.org/roachclaw/")!
+
     var connection = CompanionConnectionSettings.load() {
         didSet { connection.save() }
     }
@@ -174,6 +178,38 @@ final class CompanionAppModel {
 
     var usingRoachTailPeerToken: Bool {
         connection.usesRoachTailPeerToken
+    }
+
+    var accountStatusTitle: String {
+        if let account = runtime?.account {
+            if account.linked {
+                return account.displayName ?? account.email ?? "Account linked."
+            }
+            return "Account lane is local-only."
+        }
+
+        return connection.isConfigured ? "Account sync lane is ready." : "Link this device first."
+    }
+
+    var accountStatusDetail: String {
+        if let account = runtime?.account {
+            let syncLine: String
+            if account.settingsSyncEnabled || account.savedAppsSyncEnabled {
+                syncLine = "Settings and saved apps can follow the same contained account lane."
+            } else {
+                syncLine = "This install is still local-only until you arm sync on the account lane."
+            }
+
+            let chatLine = account.hostedChatEnabled
+                ? "Hosted RoachClaw is allowed on this account."
+                : "Hosted RoachClaw is still off for this account."
+
+            return "\(syncLine) \(chatLine)"
+        }
+
+        return connection.isConfigured
+            ? "Use the website account lane for RoachClaw web chat, synced settings, and device-aware RoachSync state."
+            : "Pair this phone to the desktop first, then link the wider account lane."
     }
 
     func categoryDescription(for category: String) -> String {
@@ -482,27 +518,7 @@ final class CompanionAppModel {
             return
         }
 
-        if !connection.isConfigured {
-            queueInstall(item.title, intent: intent)
-            bannerText = "\(item.title) is queued until the desktop comes back."
-            errorText = nil
-            return
-        }
-
-        installingItemIDs.insert(item.id)
-        defer { installingItemIDs.remove(item.id) }
-
-        do {
-            _ = try await client.install(intent: intent, using: connection)
-            recordRecentInstall(item.id)
-            bannerText = "\(item.title) was sent to RoachNet."
-            errorText = nil
-            persistCache()
-        } catch {
-            queueInstall(item.title, intent: intent)
-            bannerText = "\(item.title) is queued until the desktop comes back."
-            errorText = nil
-        }
+        await submitInstallIntent(title: item.title, intent: intent, matchedItemID: item.id)
     }
 
     func affectService(_ serviceName: String, action: String) async {
@@ -569,6 +585,7 @@ final class CompanionAppModel {
                     systemInfo: runtime?.systemInfo,
                     providers: runtime?.providers ?? CompanionProviderEnvelope(providers: [:]),
                     roachClaw: runtime?.roachClaw ?? CompanionDemoState.runtime.roachClaw,
+                    account: runtime?.account ?? CompanionDemoState.runtime.account,
                     roachTail: existing,
                     roachSync: runtime?.roachSync ?? CompanionDemoState.runtime.roachSync,
                     services: runtime?.services ?? [],
@@ -728,6 +745,45 @@ final class CompanionAppModel {
         persistCache()
     }
 
+    func clearConnection() {
+        connection = CompanionConnectionSettings(
+            baseURL: CompanionConnectionSettings.recommendedBaseURL,
+            token: "",
+            pairCode: ""
+        )
+        pairedMachineName = nil
+        runtime = nil
+        vault = nil
+        sessionList = []
+        currentSession = nil
+        clearBanner()
+        applyDemoStateIfNeeded()
+        settingsPresented = false
+    }
+
+    func handleIncomingURL(_ url: URL) {
+        guard let scheme = url.scheme?.lowercased(), scheme == "roachnet" else {
+            return
+        }
+
+        switch normalizedRoute(from: url) {
+        case "install-content":
+            handleInstallDeepLink(queryValues(from: url))
+        case "pair", "pair-roachtail", "roachtail":
+            applyRoachTailPairingQuery(from: url)
+        case "open-apps":
+            selectedTab = .apps
+        case "open-runtime":
+            selectedTab = .runtime
+        case "open-vault":
+            selectedTab = .vault
+        case "open-chat":
+            selectedTab = .chat
+        default:
+            break
+        }
+    }
+
     func iconURL(for item: StoreAppItem) -> URL? {
         guard let iconAsset = item.iconAsset else { return nil }
         guard let catalogBase = URL(string: appsCatalogURL) else { return nil }
@@ -783,6 +839,38 @@ final class CompanionAppModel {
 
     private var currentAppVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.2"
+    }
+
+    private func submitInstallIntent(title: String, intent: StoreInstallIntent, matchedItemID: String?) async {
+        if !connection.isConfigured {
+            queueInstall(title, intent: intent)
+            bannerText = "\(title) is queued until the desktop comes back."
+            errorText = nil
+            return
+        }
+
+        if let matchedItemID {
+            installingItemIDs.insert(matchedItemID)
+        }
+        defer {
+            if let matchedItemID {
+                installingItemIDs.remove(matchedItemID)
+            }
+        }
+
+        do {
+            _ = try await client.install(intent: intent, using: connection)
+            if let matchedItemID {
+                recordRecentInstall(matchedItemID)
+            }
+            bannerText = "\(title) was sent to RoachNet."
+            errorText = nil
+            persistCache()
+        } catch {
+            queueInstall(title, intent: intent)
+            bannerText = "\(title) is queued until the desktop comes back."
+            errorText = nil
+        }
     }
 
     private func queueInstall(_ title: String, intent: StoreInstallIntent) {
@@ -862,6 +950,7 @@ final class CompanionAppModel {
             systemInfo: existing.systemInfo,
             providers: existing.providers,
             roachClaw: existing.roachClaw,
+            account: existing.account,
             roachTail: status,
             roachSync: existing.roachSync,
             services: existing.services,
@@ -923,5 +1012,103 @@ final class CompanionAppModel {
         vault = CompanionDemoState.vault
         bannerText = "Preview mode is ready. Link your Mac to go live."
         persistCache()
+    }
+
+    private func normalizedRoute(from url: URL) -> String {
+        if let host = url.host?.trimmingCharacters(in: .whitespacesAndNewlines), !host.isEmpty {
+            return host.lowercased()
+        }
+
+        return url.pathComponents
+            .dropFirst()
+            .first?
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .lowercased() ?? ""
+    }
+
+    private func queryValues(from url: URL) -> [String: String] {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return [:]
+        }
+
+        return components.queryItems?.reduce(into: [String: String]()) { partial, item in
+            guard let value = item.value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+                return
+            }
+            partial[item.name] = value
+        } ?? [:]
+    }
+
+    private func handleInstallDeepLink(_ values: [String: String]) {
+        guard !values.isEmpty else {
+            errorText = "That install link did not include a RoachNet app payload."
+            return
+        }
+
+        let itemID = values["id"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = values["title"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? values["name"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? itemID
+            ?? "RoachNet app"
+
+        let intentValues = values.filter { key, _ in
+            !["title", "name", "detail", "openTab", "preview", "category"].contains(key)
+        }
+
+        guard let action = intentValues["action"], !action.isEmpty else {
+            errorText = "That install link was missing its RoachNet install action."
+            return
+        }
+
+        let matchedItem = catalogItems.first { item in
+            if let itemID, item.id == itemID {
+                return true
+            }
+
+            return item.installIntent?.values == intentValues
+        }
+
+        if let matchedItem {
+            selectedCategory = matchedItem.category
+            selectedStoreItem = matchedItem
+        } else {
+            selectedStoreItem = nil
+            if let category = values["category"], categories.contains(category) {
+                selectedCategory = category
+            } else {
+                selectedCategory = "Today"
+            }
+        }
+
+        selectedTab = .apps
+
+        Task {
+            await submitInstallIntent(title: title, intent: StoreInstallIntent(values: intentValues), matchedItemID: matchedItem?.id)
+        }
+    }
+
+    private func applyRoachTailPairingQuery(from url: URL) {
+        let values = queryValues(from: url)
+        guard !values.isEmpty else {
+            errorText = "That RoachTail link did not include pairing details."
+            return
+        }
+
+        if let bridgeURL = values["bridgeUrl"] ?? values["baseURL"] ?? values["runtimeTunnelUrl"] ?? values["runtimeOrigin"] {
+            connection.baseURL = bridgeURL
+        }
+
+        if let joinCode = values["joinCode"] ?? values["pairCode"] {
+            connection.pairCode = joinCode
+        }
+
+        if let token = values["token"], !token.isEmpty {
+            connection.token = token
+        }
+
+        connection.save()
+        selectedTab = .runtime
+        bannerText = "RoachTail pairing data loaded."
+        errorText = nil
     }
 }

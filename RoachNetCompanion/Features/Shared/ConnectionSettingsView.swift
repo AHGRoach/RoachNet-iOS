@@ -13,13 +13,47 @@ struct ConnectionSettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    RoachPanel {
+                    RoachHeroPanel(accent: RoachTheme.tertiary) {
                         VStack(alignment: .leading, spacing: 14) {
                             RoachSectionHeader(
                                 eyebrow: "Pairing",
                                 title: "Link this phone to your Mac.",
                                 detail: "Use the companion URL with a RoachTail join code, or paste the full companion token if you already have it."
                             )
+
+                            LazyVGrid(
+                                columns: [
+                                    GridItem(.flexible(minimum: 0), spacing: 10),
+                                    GridItem(.flexible(minimum: 0), spacing: 10),
+                                ],
+                                alignment: .leading,
+                                spacing: 10
+                            ) {
+                                RoachSignalTile(
+                                    label: "Bridge",
+                                    value: model.connection.isConfigured ? "Configured" : "Waiting",
+                                    accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary,
+                                    systemImage: "link"
+                                )
+                                RoachSignalTile(
+                                    label: "Transport",
+                                    value: model.connection.securityLabel,
+                                    accent: RoachTheme.tertiary,
+                                    systemImage: "shield.lefthalf.filled"
+                                )
+                                RoachSignalTile(
+                                    label: "RoachTail",
+                                    value: model.usingRoachTailPeerToken ? "Peer token" : "Join code",
+                                    accent: RoachTheme.secondary,
+                                    systemImage: "point.3.connected.trianglepath.dotted"
+                                )
+                                RoachSignalTile(
+                                    label: "Account",
+                                    value: model.runtime?.account?.linked == true ? "Linked" : "Local",
+                                    accent: model.runtime?.account?.linked == true ? RoachTheme.primary : RoachTheme.tertiary,
+                                    systemImage: "person.crop.circle"
+                                )
+                            }
 
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Companion URL")
@@ -94,42 +128,184 @@ struct ConnectionSettingsView: View {
                         }
                     }
 
-                    HStack(spacing: 12) {
-                        Button("Scan QR") {
-                            scannerError = nil
-                            scannerPresented = true
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(RoachTheme.tertiary)
+                    RoachPanel {
+                        VStack(alignment: .leading, spacing: 12) {
+                            RoachSectionHeader(
+                                eyebrow: "Security",
+                                title: model.connection.securityLabel,
+                                detail: model.connection.securityDetail
+                            )
 
-                        Button("Pair with RoachTail") {
-                            Task {
-                                await model.pairWithRoachTail()
-                                if model.connection.isConfigured {
+                            RoachBadge(
+                                title: model.connection.isConfigured ? model.connection.securityLabel : "Needs trusted lane",
+                                accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary
+                            )
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("RoachNetiOS keeps the chat lane native. There is no embedded browser surface inside the app.")
+                                Text("Companion tokens live in the iOS Keychain instead of plain user defaults.")
+                                Text("Remote bridges must be HTTPS. Plain HTTP is limited to trusted local RoachNet lanes such as RoachTail, localhost, and private network hosts.")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(RoachTheme.subduedText)
+                        }
+                    }
+
+                    RoachPanel {
+                        VStack(alignment: .leading, spacing: 12) {
+                            RoachSectionHeader(
+                                eyebrow: "Account",
+                                title: model.accountStatusTitle,
+                                detail: model.accountStatusDetail
+                            )
+
+                            if let account = model.runtime?.account {
+                                RoachBadge(
+                                    title: account.linked ? "Linked" : "Local only",
+                                    accent: account.linked ? RoachTheme.secondary : RoachTheme.primary
+                                )
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Alias host: \(account.aliasHost)")
+                                    if let email = account.email, !email.isEmpty {
+                                        Text("Account: \(email)")
+                                    }
+                                    Text(account.settingsSyncEnabled ? "Settings sync is armed." : "Settings stay local on this phone right now.")
+                                    Text(account.savedAppsSyncEnabled ? "Saved app picks can follow the account lane." : "Saved app picks stay local until sync is armed.")
+                                    Text(account.hostedChatEnabled ? "Hosted RoachClaw is allowed for this account." : "Hosted RoachClaw is off for this account.")
+                                }
+                                .font(.caption)
+                                .foregroundStyle(RoachTheme.subduedText)
+
+                                if !account.notes.isEmpty {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        ForEach(account.notes.prefix(3), id: \.self) { note in
+                                            Text(note)
+                                        }
+                                    }
+                                    .font(.caption)
+                                    .foregroundStyle(RoachTheme.subduedText)
+                                }
+                            } else {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("The website lane is where account auth, hosted RoachClaw, and future synced settings live.")
+                                    Text("Desktop data still stays grouped inside the contained RoachNet folder and the RoachTail/RoachSync lanes.")
+                                }
+                                .font(.caption)
+                                .foregroundStyle(RoachTheme.subduedText)
+                            }
+
+                            HStack(spacing: 10) {
+                                Link(destination: CompanionAppModel.accountPortalURL) {
+                                    Text("Open account lane")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(RoachTheme.primary)
+
+                                Link(destination: CompanionAppModel.apiDocsURL) {
+                                    Text("API docs")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(RoachTheme.secondary)
+                            }
+                        }
+                    }
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) {
+                            Button("Scan QR") {
+                                scannerError = nil
+                                scannerPresented = true
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(RoachTheme.tertiary)
+
+                            Button("Pair with RoachTail") {
+                                Task {
+                                    await model.pairWithRoachTail()
+                                    if model.connection.isConfigured {
+                                        dismiss()
+                                    }
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(RoachTheme.secondary)
+
+                            Button("Save & Test") {
+                                Task {
+                                    model.connection.save()
+                                    await model.refreshAll()
                                     dismiss()
                                 }
                             }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(RoachTheme.secondary)
+                            .buttonStyle(.borderedProminent)
+                            .tint(RoachTheme.primary)
 
-                        Button("Save & Test") {
-                            Task {
-                                model.connection.save()
-                                await model.refreshAll()
+                            Button("Refresh") {
+                                Task {
+                                    await model.refreshAll()
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(RoachTheme.secondary)
+                        }
+
+                        VStack(spacing: 10) {
+                            Button("Scan QR") {
+                                scannerError = nil
+                                scannerPresented = true
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(RoachTheme.tertiary)
+
+                            Button("Pair with RoachTail") {
+                                Task {
+                                    await model.pairWithRoachTail()
+                                    if model.connection.isConfigured {
+                                        dismiss()
+                                    }
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(RoachTheme.secondary)
+
+                            Button("Save & Test") {
+                                Task {
+                                    model.connection.save()
+                                    await model.refreshAll()
+                                    dismiss()
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(RoachTheme.primary)
+
+                            Button("Refresh") {
+                                Task {
+                                    await model.refreshAll()
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(RoachTheme.secondary)
+                        }
+                    }
+
+                    RoachPanel {
+                        VStack(alignment: .leading, spacing: 12) {
+                            RoachSectionHeader(
+                                eyebrow: "Reset",
+                                title: "Forget this Mac lane.",
+                                detail: "Clear the companion token, RoachTail join code, and desktop bridge details from this phone."
+                            )
+
+                            Button("Forget linked Mac") {
+                                model.clearConnection()
                                 dismiss()
                             }
+                            .buttonStyle(.bordered)
+                            .tint(RoachTheme.primary)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(RoachTheme.primary)
-
-                        Button("Refresh") {
-                            Task {
-                                await model.refreshAll()
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(RoachTheme.secondary)
                     }
                 }
                 .padding(18)

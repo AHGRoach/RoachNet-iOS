@@ -534,6 +534,105 @@ struct CompanionRoachSyncStatus: Codable, Hashable, Sendable {
     }
 }
 
+struct CompanionAccountStatus: Codable, Hashable, Sendable {
+    let linked: Bool
+    let provider: String
+    let portalUrl: String
+    let accountId: String?
+    let email: String?
+    let displayName: String?
+    let status: String
+    let settingsSyncEnabled: Bool
+    let savedAppsSyncEnabled: Bool
+    let hostedChatEnabled: Bool
+    let aliasHost: String
+    let bridgeUrl: String?
+    let runtimeOrigin: String?
+    let linkedAt: Date?
+    let lastSeenAt: Date?
+    let lastUpdatedAt: Date?
+    let notes: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case linked
+        case provider
+        case portalUrl
+        case accountId
+        case email
+        case displayName
+        case status
+        case settingsSyncEnabled
+        case savedAppsSyncEnabled
+        case hostedChatEnabled
+        case aliasHost
+        case bridgeUrl
+        case runtimeOrigin
+        case linkedAt
+        case lastSeenAt
+        case lastUpdatedAt
+        case notes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        linked = (try? container.decode(Bool.self, forKey: .linked)) ?? false
+        provider = (try? container.decode(String.self, forKey: .provider)) ?? "RoachNet Account"
+        portalUrl = (try? container.decode(String.self, forKey: .portalUrl)) ?? "https://accounts.roachnet.org/"
+        accountId = try? container.decodeIfPresent(String.self, forKey: .accountId)
+        email = try? container.decodeIfPresent(String.self, forKey: .email)
+        displayName = try? container.decodeIfPresent(String.self, forKey: .displayName)
+        status = (try? container.decode(String.self, forKey: .status)) ?? "local-only"
+        settingsSyncEnabled = (try? container.decode(Bool.self, forKey: .settingsSyncEnabled)) ?? false
+        savedAppsSyncEnabled = (try? container.decode(Bool.self, forKey: .savedAppsSyncEnabled)) ?? false
+        hostedChatEnabled = (try? container.decode(Bool.self, forKey: .hostedChatEnabled)) ?? false
+        aliasHost = (try? container.decode(String.self, forKey: .aliasHost)) ?? "RoachNet"
+        bridgeUrl = try? container.decodeIfPresent(String.self, forKey: .bridgeUrl)
+        runtimeOrigin = try? container.decodeIfPresent(String.self, forKey: .runtimeOrigin)
+        linkedAt = container.decodeLossyDateIfPresent(forKey: .linkedAt)
+        lastSeenAt = container.decodeLossyDateIfPresent(forKey: .lastSeenAt)
+        lastUpdatedAt = container.decodeLossyDateIfPresent(forKey: .lastUpdatedAt)
+        notes = (try? container.decode([String].self, forKey: .notes)) ?? []
+    }
+
+    init(
+        linked: Bool,
+        provider: String,
+        portalUrl: String,
+        accountId: String?,
+        email: String?,
+        displayName: String?,
+        status: String,
+        settingsSyncEnabled: Bool,
+        savedAppsSyncEnabled: Bool,
+        hostedChatEnabled: Bool,
+        aliasHost: String,
+        bridgeUrl: String?,
+        runtimeOrigin: String?,
+        linkedAt: Date?,
+        lastSeenAt: Date?,
+        lastUpdatedAt: Date?,
+        notes: [String]
+    ) {
+        self.linked = linked
+        self.provider = provider
+        self.portalUrl = portalUrl
+        self.accountId = accountId
+        self.email = email
+        self.displayName = displayName
+        self.status = status
+        self.settingsSyncEnabled = settingsSyncEnabled
+        self.savedAppsSyncEnabled = savedAppsSyncEnabled
+        self.hostedChatEnabled = hostedChatEnabled
+        self.aliasHost = aliasHost
+        self.bridgeUrl = bridgeUrl
+        self.runtimeOrigin = runtimeOrigin
+        self.linkedAt = linkedAt
+        self.lastSeenAt = lastSeenAt
+        self.lastUpdatedAt = lastUpdatedAt
+        self.notes = notes
+    }
+}
+
 struct CompanionService: Codable, Identifiable, Hashable, Sendable {
     let serviceName: String
     let friendlyName: String?
@@ -677,6 +776,7 @@ struct CompanionRuntimeSummary: Codable, Hashable, Sendable {
     let systemInfo: CompanionSystemInfo?
     let providers: CompanionProviderEnvelope
     let roachClaw: CompanionRoachClawStatus
+    let account: CompanionAccountStatus?
     let roachTail: CompanionRoachTailStatus?
     let roachSync: CompanionRoachSyncStatus?
     let services: [CompanionService]

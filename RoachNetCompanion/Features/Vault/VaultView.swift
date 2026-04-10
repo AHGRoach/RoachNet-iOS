@@ -10,6 +10,7 @@ struct VaultView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        vaultHeader
                         if let vault = model.vault {
                             summaryPanel(vault)
                             notesPanel(vault)
@@ -47,7 +48,138 @@ struct VaultView: View {
                     await model.refreshAll()
                 }
             }
-            .navigationTitle("Vault")
+            .navigationBarHidden(true)
+        }
+    }
+
+    private var vaultHeader: some View {
+        RoachHeroPanel(accent: RoachTheme.secondary) {
+            VStack(alignment: .leading, spacing: 14) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                RoachSectionHeader(
+                                    eyebrow: "Vault",
+                                    title: "Your shelf, carried forward.",
+                                    detail: "RoachBrain notes, indexed files, and saved captures stay readable on the phone without opening the whole desktop shell."
+                                )
+
+                                if let lastRefreshAt = model.lastRefreshAt {
+                                    Text("Last sync \(formattedRelativeDate(lastRefreshAt))")
+                                        .font(.caption)
+                                        .foregroundStyle(RoachTheme.subduedText)
+                                }
+                            }
+
+                            vaultPills
+                        }
+
+                        Spacer(minLength: 12)
+
+                        VStack(alignment: .trailing, spacing: 12) {
+                            Button {
+                                model.settingsPresented = true
+                            } label: {
+                                Label("Settings", systemImage: "slider.horizontal.3")
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(RoachTheme.secondary)
+
+                            vaultSignals
+                                .frame(width: 280, alignment: .trailing)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            RoachSectionHeader(
+                                eyebrow: "Vault",
+                                title: "Your shelf, carried forward.",
+                                detail: "RoachBrain notes, indexed files, and saved captures stay readable on the phone without opening the whole desktop shell."
+                            )
+
+                            if let lastRefreshAt = model.lastRefreshAt {
+                                Text("Last sync \(formattedRelativeDate(lastRefreshAt))")
+                                    .font(.caption)
+                                    .foregroundStyle(RoachTheme.subduedText)
+                            }
+                        }
+
+                        vaultPills
+                        vaultSignals
+
+                        Button {
+                            model.settingsPresented = true
+                        } label: {
+                            Label("Connection settings", systemImage: "slider.horizontal.3")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(RoachTheme.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var vaultPills: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                RoachStatusPill(
+                    title: model.connection.isConfigured ? "Paired vault" : "Local cache",
+                    accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary
+                )
+                RoachStatusPill(
+                    title: model.runtime?.account?.linked == true ? "Account sync" : "Account local",
+                    accent: model.runtime?.account?.linked == true ? RoachTheme.tertiary : RoachTheme.primary
+                )
+                RoachStatusPill(
+                    title: model.runtime?.roachSync?.enabled == true ? "RoachSync armed" : "RoachSync off",
+                    accent: model.runtime?.roachSync?.enabled == true ? RoachTheme.secondary : RoachTheme.primary
+                )
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    private var vaultSignals: some View {
+        let roachBrainCount = model.vault?.roachBrain.count ?? 0
+        let knowledgeCount = model.vault?.knowledgeFiles.count ?? 0
+        let archiveCount = model.vault?.siteArchives.count ?? 0
+
+        return LazyVGrid(
+            columns: [
+                GridItem(.flexible(minimum: 0), spacing: 10),
+                GridItem(.flexible(minimum: 0), spacing: 10),
+            ],
+            alignment: .leading,
+            spacing: 10
+        ) {
+            RoachSignalTile(
+                label: "RoachBrain",
+                value: "\(roachBrainCount)",
+                accent: RoachTheme.primary,
+                systemImage: "brain.head.profile"
+            )
+            RoachSignalTile(
+                label: "Files",
+                value: "\(knowledgeCount)",
+                accent: RoachTheme.secondary,
+                systemImage: "doc.text"
+            )
+            RoachSignalTile(
+                label: "Archives",
+                value: "\(archiveCount)",
+                accent: RoachTheme.tertiary,
+                systemImage: "shippingbox"
+            )
+            RoachSignalTile(
+                label: "Link",
+                value: model.connection.isConfigured ? "Ready" : "Pair first",
+                accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary,
+                systemImage: "link"
+            )
         }
     }
 
@@ -60,10 +192,15 @@ struct VaultView: View {
                     detail: "RoachBrain notes, indexed files, and site archives stay browseable without opening the full desktop shell."
                 )
 
-                HStack(spacing: 10) {
+                RoachMetricRow {
                     RoachMetricTile(label: "RoachBrain", value: "\(vault.roachBrain.count)", accent: RoachTheme.primary)
                     RoachMetricTile(label: "Files", value: "\(vault.knowledgeFiles.count)", accent: RoachTheme.secondary)
                     RoachMetricTile(label: "Archives", value: "\(vault.siteArchives.count)", accent: RoachTheme.tertiary)
+                }
+
+                HStack(spacing: 10) {
+                    RoachActionPill(title: "RoachBrain", systemImage: "brain.head.profile", accent: RoachTheme.primary)
+                    RoachActionPill(title: "Archives", systemImage: "shippingbox", accent: RoachTheme.tertiary)
                 }
 
                 if let lastRefreshAt = model.lastRefreshAt {
