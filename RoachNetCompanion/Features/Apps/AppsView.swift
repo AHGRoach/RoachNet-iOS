@@ -1,8 +1,11 @@
 import SwiftUI
 
 struct AppsView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Bindable var model: CompanionAppModel
-    private let columns = [GridItem(.adaptive(minimum: 172), spacing: 14)]
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: horizontalSizeClass == .compact ? 160 : 214), spacing: 14)]
+    }
 
     var body: some View {
         NavigationStack {
@@ -13,6 +16,7 @@ struct AppsView: View {
                     VStack(alignment: .leading, spacing: 14) {
                         storeHeader
                         searchField
+                        appHandoffPanel
                         categoryStrip
                         featuredCard
                         sectionIntro
@@ -23,7 +27,10 @@ struct AppsView: View {
                         catalogGrid
                     }
                     .padding(16)
-                    .padding(.bottom, 108)
+                    .padding(.bottom, RoachCompanionChrome.bottomContentClearance)
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: RoachCompanionChrome.tabBarAvoidance)
                 }
                 .refreshable {
                     try? await model.loadCatalog()
@@ -33,6 +40,8 @@ struct AppsView: View {
                 }
             }
             .navigationBarHidden(true)
+            .animation(.snappy(duration: 0.26), value: model.selectedCategory)
+            .animation(.spring(response: 0.34, dampingFraction: 0.82), value: model.queuedInstallCount)
             .sheet(item: Binding(
                 get: { model.selectedStoreItem },
                 set: { model.selectedStoreItem = $0 }
@@ -40,6 +49,113 @@ struct AppsView: View {
                 AppDetailSheet(model: model, item: item)
             }
         }
+    }
+
+    private var appHandoffPanel: some View {
+        RoachPanel {
+            VStack(alignment: .leading, spacing: 12) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: 10) {
+                        handoffSteps
+                        Spacer(minLength: 8)
+                        handoffAction
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        handoffSteps
+                        handoffAction
+                    }
+                }
+            }
+        }
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    private var handoffSteps: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                InstallFlowStep(
+                    title: "Pick",
+                    detail: "\(model.visibleCatalogItems.count) ready",
+                    systemImage: "square.grid.2x2.fill",
+                    accent: RoachTheme.tertiary,
+                    isActive: true
+                )
+                InstallFlowStep(
+                    title: "Send",
+                    detail: model.connection.isConfigured ? "Bridge open" : "Pair Mac",
+                    systemImage: model.connection.isConfigured ? "link" : "link.badge.plus",
+                    accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary,
+                    isActive: model.connection.isConfigured
+                )
+                InstallFlowStep(
+                    title: "Stash",
+                    detail: model.queuedInstallCount > 0 ? "\(model.queuedInstallCount) queued" : "Clear",
+                    systemImage: model.queuedInstallCount > 0 ? "tray.full.fill" : "checkmark.seal.fill",
+                    accent: model.queuedInstallCount > 0 ? RoachTheme.primary : RoachTheme.secondary,
+                    isActive: model.queuedInstallCount == 0
+                )
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(minimum: 0), spacing: 10),
+                    GridItem(.flexible(minimum: 0), spacing: 10),
+                ],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                InstallFlowStep(
+                    title: "Pick",
+                    detail: "\(model.visibleCatalogItems.count) ready",
+                    systemImage: "square.grid.2x2.fill",
+                    accent: RoachTheme.tertiary,
+                    isActive: true
+                )
+                InstallFlowStep(
+                    title: "Send",
+                    detail: model.connection.isConfigured ? "Bridge open" : "Pair Mac",
+                    systemImage: model.connection.isConfigured ? "link" : "link.badge.plus",
+                    accent: model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary,
+                    isActive: model.connection.isConfigured
+                )
+                InstallFlowStep(
+                    title: "Stash",
+                    detail: model.queuedInstallCount > 0 ? "\(model.queuedInstallCount) queued" : "Clear",
+                    systemImage: model.queuedInstallCount > 0 ? "tray.full.fill" : "checkmark.seal.fill",
+                    accent: model.queuedInstallCount > 0 ? RoachTheme.primary : RoachTheme.secondary,
+                    isActive: model.queuedInstallCount == 0
+                )
+            }
+        }
+    }
+
+    private var handoffAction: some View {
+        Button {
+            if model.connection.isConfigured {
+                Task { await model.refreshAll() }
+            } else {
+                model.settingsPresented = true
+            }
+        } label: {
+            Label(model.connection.isConfigured ? "Refresh bridge" : "Pair the Mac", systemImage: model.connection.isConfigured ? "arrow.clockwise" : "qrcode.viewfinder")
+                .font(.caption.weight(.black))
+                .lineLimit(1)
+                .minimumScaleFactor(0.76)
+                .frame(minWidth: 132)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(model.connection.isConfigured ? RoachTheme.secondary.opacity(0.22) : RoachTheme.primary.opacity(0.24))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder((model.connection.isConfigured ? RoachTheme.secondary : RoachTheme.primary).opacity(0.44), lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(RoachPressableButtonStyle())
+        .foregroundStyle(Color.white)
     }
 
     private var storeHeader: some View {
@@ -229,7 +345,7 @@ struct AppsView: View {
                             model.selectedCategory = category
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(RoachPressableButtonStyle(scale: 0.94))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(
@@ -253,7 +369,7 @@ struct AppsView: View {
         VStack(alignment: .leading, spacing: 8) {
             RoachSectionHeader(
                 eyebrow: model.selectedCategory,
-                title: model.selectedCategory == "Today" ? "The fast start shelf." : "\(model.selectedCategory) brought closer.",
+                title: model.selectedCategory == "Today" ? "The fast start shelf." : "\(model.selectedCategory) on deck.",
                 detail: model.categoryDescription(for: model.selectedCategory)
             )
 
@@ -316,14 +432,47 @@ struct AppsView: View {
                     .font(.headline)
                     .foregroundStyle(RoachTheme.text)
 
+                HStack {
+                    Text("These will flush after the companion bridge comes back.")
+                        .font(.caption)
+                        .foregroundStyle(RoachTheme.subduedText)
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        model.clearPendingInstallQueue()
+                    } label: {
+                        Label("Clear", systemImage: "trash")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(RoachTheme.primary)
+                    .accessibilityLabel("Clear queued installs")
+                }
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(model.pendingInstallQueue.prefix(8)) { item in
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(item.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(RoachTheme.text)
-                                    .lineLimit(1)
+                                HStack(alignment: .top, spacing: 8) {
+                                    Text(item.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RoachTheme.text)
+                                        .lineLimit(2)
+
+                                    Spacer(minLength: 4)
+
+                                    Button {
+                                        model.removeQueuedInstall(item)
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.caption.weight(.bold))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(RoachTheme.subduedText)
+                                    .accessibilityLabel("Remove \(item.title) from queue")
+                                }
+
                                 Text("Queued \(formattedRelativeDate(item.createdAt))")
                                     .font(.caption)
                                     .foregroundStyle(RoachTheme.subduedText)
@@ -386,9 +535,59 @@ struct AppsView: View {
             LazyVGrid(columns: columns, spacing: 14) {
                 ForEach(model.visibleCatalogItems) { item in
                     AppCard(model: model, item: item)
+                        .transition(.scale(scale: 0.96).combined(with: .opacity))
                 }
             }
         }
+    }
+}
+
+private struct InstallFlowStep: View {
+    let title: String
+    let detail: String
+    let systemImage: String
+    let accent: Color
+    let isActive: Bool
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.white)
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(accent.opacity(isActive ? 0.28 : 0.14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(accent.opacity(isActive ? 0.45 : 0.20), lineWidth: 1)
+                        )
+                )
+                .symbolEffect(.pulse, value: detail)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title.uppercased())
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(accent)
+                    .tracking(0.8)
+                Text(detail)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RoachTheme.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.74)
+                    .contentTransition(.numericText())
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(RoachTheme.elevatedSurface.opacity(isActive ? 0.92 : 0.68))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(accent.opacity(isActive ? 0.22 : 0.12), lineWidth: 1)
+                )
+        )
     }
 }
 
@@ -477,7 +676,7 @@ private struct SpotlightCard: View {
                     )
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(RoachPressableButtonStyle(scale: 0.975))
     }
 }
 
@@ -593,6 +792,32 @@ private struct AppDetailSheet: View {
                                     }
                                 }
 
+                                if let machineFit = item.machineFit {
+                                    HStack(alignment: .top, spacing: 10) {
+                                        Image(systemName: "desktopcomputer")
+                                            .font(.headline)
+                                            .foregroundStyle(roachAccentColor(for: item.accent))
+
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("Mac fit")
+                                                .font(.caption.weight(.bold))
+                                                .foregroundStyle(RoachTheme.secondary)
+                                            Text(machineFit)
+                                                .font(.caption)
+                                                .foregroundStyle(RoachTheme.subduedText)
+                                        }
+                                    }
+                                    .padding(12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .fill(RoachTheme.elevatedSurface.opacity(0.88))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .strokeBorder(RoachTheme.border, lineWidth: 1)
+                                    )
+                                }
+
                                 if !item.includes.isEmpty {
                                     VStack(alignment: .leading, spacing: 8) {
                                         Text("Inside")
@@ -632,6 +857,24 @@ private struct AppDetailSheet: View {
                                 )
                                 .buttonStyle(.plain)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                                if let installURL = model.installDeepLink(for: item) {
+                                    ShareLink(item: installURL) {
+                                        Label("Share install link", systemImage: "square.and.arrow.up")
+                                            .font(.subheadline.weight(.bold))
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 12)
+                                            .background(
+                                                Capsule(style: .continuous)
+                                                    .fill(RoachTheme.elevatedSurface.opacity(0.95))
+                                            )
+                                            .overlay(
+                                                Capsule(style: .continuous)
+                                                    .strokeBorder(RoachTheme.secondary.opacity(0.32), lineWidth: 1)
+                                            )
+                                    }
+                                    .foregroundStyle(RoachTheme.text)
+                                }
                             }
                         }
                     }
@@ -729,6 +972,7 @@ private struct StoreActionStrip: View {
         .foregroundStyle(Color.white)
         .disabled(isInstalling)
         .opacity(isInstalling ? 0.72 : 1)
+        .buttonStyle(RoachPressableButtonStyle(scale: 0.97))
     }
 
     private var detailsButton: some View {
@@ -750,7 +994,7 @@ private struct StoreActionStrip: View {
                 .strokeBorder(RoachTheme.secondary.opacity(0.32), lineWidth: 1)
         )
         .foregroundStyle(RoachTheme.text)
-        .buttonStyle(.plain)
+        .buttonStyle(RoachPressableButtonStyle(scale: 0.97))
     }
 
     private var favoriteButton: some View {
@@ -771,7 +1015,7 @@ private struct StoreActionStrip: View {
                 .strokeBorder((model.isFavorite(item) ? RoachTheme.primary : RoachTheme.secondary).opacity(0.34), lineWidth: 1)
         )
         .foregroundStyle(model.isFavorite(item) ? Color.white : RoachTheme.text)
-        .buttonStyle(.plain)
+        .buttonStyle(RoachPressableButtonStyle(scale: 0.92))
     }
 }
 

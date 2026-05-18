@@ -47,6 +47,10 @@ struct VaultView: View {
                         }
                     }
                     .padding(16)
+                    .padding(.bottom, RoachCompanionChrome.bottomContentClearance)
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: RoachCompanionChrome.tabBarAvoidance)
                 }
                 .refreshable {
                     await model.refreshAll()

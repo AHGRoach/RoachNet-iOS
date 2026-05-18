@@ -24,10 +24,27 @@ struct CompanionVisionAttachment: Identifiable, Equatable {
     }
 }
 
+struct CompanionVoiceProfile: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let language: String
+    let quality: String
+    let isPreferredLanguage: Bool
+
+    var title: String {
+        name.isEmpty ? language : name
+    }
+
+    var subtitle: String {
+        "\(quality) / \(language)"
+    }
+}
+
 @MainActor
 final class CompanionSpeechController: NSObject {
     enum SpeechError: LocalizedError {
         case unavailable
+        case onDeviceRecognitionUnavailable(String)
         case speechPermissionDenied
         case microphonePermissionDenied
         case startupFailed(String)
@@ -36,6 +53,8 @@ final class CompanionSpeechController: NSObject {
             switch self {
             case .unavailable:
                 return "RoachNetiOS could not bring up the local voice lane."
+            case .onDeviceRecognitionUnavailable(let language):
+                return "On-device speech is not available for \(language) on this device yet. Download the system language pack or pick another voice lane."
             case .speechPermissionDenied:
                 return "Allow Speech Recognition for RoachNetiOS so it can capture voice prompts."
             case .microphonePermissionDenied:
@@ -55,21 +74,55 @@ final class CompanionSpeechController: NSObject {
     private var speechFinish: ((Bool) -> Void)?
     private var currentTranscript = ""
     private var didFinalizeTranscript = false
-    private lazy var recognizer: SFSpeechRecognizer? = {
-        SFSpeechRecognizer(locale: Locale(identifier: "en-US")) ?? SFSpeechRecognizer()
-    }()
 
     override init() {
         super.init()
         synthesizer.delegate = self
     }
 
+    static func availableVoiceProfiles(localeIdentifier: String = Locale.current.identifier) -> [CompanionVoiceProfile] {
+        let preferredPrefix = localeIdentifier.split(separator: "-").first.map(String.init) ?? "en"
+        let profiles = AVSpeechSynthesisVoice.speechVoices().map { voice in
+            CompanionVoiceProfile(
+                id: voice.identifier,
+                name: voice.name,
+                language: voice.language,
+                quality: Self.qualityLabel(for: voice),
+                isPreferredLanguage: voice.language.hasPrefix("\(preferredPrefix)-")
+            )
+        }
+
+        return profiles.sorted { lhs, rhs in
+            if lhs.isPreferredLanguage != rhs.isPreferredLanguage {
+                return lhs.isPreferredLanguage && !rhs.isPreferredLanguage
+            }
+
+            let lhsScore = qualitySortScore(lhs.quality)
+            let rhsScore = qualitySortScore(rhs.quality)
+            if lhsScore != rhsScore {
+                return lhsScore > rhsScore
+            }
+
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        }
+    }
+
+    static func supportsOnDeviceRecognition(localeIdentifier: String = "en-US") -> Bool {
+        let recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier)) ?? SFSpeechRecognizer()
+        return recognizer?.supportsOnDeviceRecognition == true
+    }
+
     func startTranscription(
+        localeIdentifier: String = "en-US",
         onUpdate: @escaping (String) -> Void,
         onFinish: @escaping (String) -> Void
     ) async throws {
+        let recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier)) ?? SFSpeechRecognizer()
         guard let recognizer, recognizer.isAvailable else {
             throw SpeechError.unavailable
+        }
+        guard recognizer.supportsOnDeviceRecognition else {
+            throw SpeechError.onDeviceRecognitionUnavailable(localeIdentifier)
         }
 
         try await requestPermissions()
@@ -90,9 +143,21 @@ final class CompanionSpeechController: NSObject {
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        if recognizer.supportsOnDeviceRecognition {
-            request.requiresOnDeviceRecognition = true
-        }
+        request.requiresOnDeviceRecognition = true
+        request.addsPunctuation = true
+        request.taskHint = .dictation
+        request.contextualStrings = [
+            "RoachNet",
+            "RoachClaw",
+            "RoachVault",
+            "RoachArcade",
+            "RoachTail",
+            "RoachSync",
+            "Ollama",
+            "OpenClaw",
+            "Homebrew",
+            "SideStore",
+        ]
         recognitionRequest = request
 
         let inputNode = audioEngine.inputNode
@@ -137,7 +202,7 @@ final class CompanionSpeechController: NSObject {
         finishTranscription(notify: commitResult && !didFinalizeTranscript)
     }
 
-    func speak(_ text: String, completion: @escaping (Bool) -> Void) {
+    func speak(_ text: String, voiceIdentifier: String?, completion: @escaping (Bool) -> Void) {
         stopSpeaking()
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -147,7 +212,11 @@ final class CompanionSpeechController: NSObject {
         }
 
         let utterance = AVSpeechUtterance(string: trimmed)
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        if let voiceIdentifier, let selectedVoice = AVSpeechSynthesisVoice(identifier: voiceIdentifier) {
+            utterance.voice = selectedVoice
+        } else {
+            utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        }
         utterance.rate = 0.48
         utterance.pitchMultiplier = 0.95
         utterance.volume = 0.92
@@ -227,6 +296,32 @@ final class CompanionSpeechController: NSObject {
         let completion = speechFinish
         speechFinish = nil
         completion?(finished)
+    }
+
+    private static func qualityLabel(for voice: AVSpeechSynthesisVoice) -> String {
+        switch voice.quality {
+        case .default:
+            return "System"
+        case .enhanced:
+            return "Enhanced"
+        case .premium:
+            return "Premium"
+        @unknown default:
+            return "Custom"
+        }
+    }
+
+    private static func qualitySortScore(_ quality: String) -> Int {
+        switch quality {
+        case "Custom":
+            return 3
+        case "Premium":
+            return 3
+        case "Enhanced":
+            return 2
+        default:
+            return 1
+        }
     }
 }
 
@@ -347,6 +442,21 @@ final class CompanionAppModel {
     var isSending = false
     var isDictatingDraft = false
     var speakingMessageID: String?
+    var availableVoiceProfiles: [CompanionVoiceProfile] = CompanionSpeechController.availableVoiceProfiles(localeIdentifier: "en-US")
+    var selectedVoiceProfileID: String = UserDefaults.standard.string(forKey: "RoachNetCompanionSelectedVoiceProfileID") ?? "" {
+        didSet {
+            UserDefaults.standard.set(selectedVoiceProfileID, forKey: Self.selectedVoiceProfileStorageKey)
+        }
+    }
+    var speechLocaleIdentifier = UserDefaults.standard.string(forKey: "RoachNetCompanionSpeechLocaleIdentifier") ?? "en-US" {
+        didSet {
+            UserDefaults.standard.set(speechLocaleIdentifier, forKey: Self.speechLocaleStorageKey)
+            availableVoiceProfiles = CompanionSpeechController.availableVoiceProfiles(localeIdentifier: speechLocaleIdentifier)
+            if !availableVoiceProfiles.contains(where: { $0.id == selectedVoiceProfileID }) {
+                selectedVoiceProfileID = availableVoiceProfiles.first?.id ?? ""
+            }
+        }
+    }
     var installingItemIDs = Set<String>()
     var actingServiceNames = Set<String>()
     var isActingRoachTail = false
@@ -357,6 +467,8 @@ final class CompanionAppModel {
     var settingsPresented = false
 
     private static let roachTailPeerStorageKey = "RoachNetCompanionRoachTailPeerID"
+    private static let selectedVoiceProfileStorageKey = "RoachNetCompanionSelectedVoiceProfileID"
+    private static let speechLocaleStorageKey = "RoachNetCompanionSpeechLocaleIdentifier"
     private let client = RoachNetAPIClient()
     private let speechController = CompanionSpeechController()
     private let forceDemoMode = CompanionLaunchOptions.forceDemoMode
@@ -370,6 +482,10 @@ final class CompanionAppModel {
     }()
 
     init() {
+        if selectedVoiceProfileID.isEmpty || !availableVoiceProfiles.contains(where: { $0.id == selectedVoiceProfileID }) {
+            selectedVoiceProfileID = availableVoiceProfiles.first?.id ?? ""
+        }
+
         if let snapshot = CompanionCacheStore.load(), !forceDemoMode {
             restore(snapshot)
         }
@@ -398,25 +514,44 @@ final class CompanionAppModel {
     }
 
     var categories: [String] {
-        let catalogCategories = Set(catalogItems.map(\.category))
+        let catalogCategories = Set(catalogItems.map(catalogGroup))
         let preferredOrder = [
             "Map Regions",
+            "Maps",
+            "Starter Stacks",
             "Medicine",
-            "Survival",
-            "Education",
-            "DIY",
-            "Agriculture",
+            "Survival & Preparedness",
+            "Education & Reference",
+            "Science & Simulations",
+            "Open Courses & Lectures",
+            "Math & Problem Solving",
+            "DIY & Repair",
+            "Maker & Electronics",
+            "Agriculture & Food",
+            "Homestead & Sustainability",
+            "Games, Film & Pop Culture",
             "Dev",
+            "Software Development",
             "ML",
+            "Machine Learning & Data Science",
+            "Platforms & Systems",
             "Audio",
+            "Music Production & Audio",
+            "Design & Visual Media",
+            "Finance & Crypto",
+            "Law, History & Society",
+            "Language & Writing",
+            "Kids & Family",
             "Infra",
+            "IT & Infrastructure",
+            "Security & Privacy",
             "Wikipedia",
             "Models",
-            "Travel",
-            "Science",
-            "Maker",
-            "Design",
-            "Deep Library",
+            "Model Packs",
+            "Travel & Field Guides",
+            "Travel, Mobility & Outdoors",
+            "Design & Visual Media",
+            "Dictionaries & Primary Sources",
         ]
 
         let ordered = preferredOrder.filter { catalogCategories.contains($0) }
@@ -440,6 +575,26 @@ final class CompanionAppModel {
             return "Speaking"
         }
         return "Tap to talk"
+    }
+
+    var selectedVoiceProfile: CompanionVoiceProfile? {
+        availableVoiceProfiles.first(where: { $0.id == selectedVoiceProfileID }) ?? availableVoiceProfiles.first
+    }
+
+    var selectedVoiceTitle: String {
+        selectedVoiceProfile?.title ?? "System voice"
+    }
+
+    var voiceEngineTitle: String {
+        CompanionSpeechController.supportsOnDeviceRecognition(localeIdentifier: speechLocaleIdentifier)
+            ? "Local speech"
+            : "Voice pack needed"
+    }
+
+    var voiceEngineDetail: String {
+        let voiceName = selectedVoiceProfile?.title ?? "system voice"
+        let quality = selectedVoiceProfile?.quality ?? "System"
+        return "\(speechLocaleIdentifier) STT / \(quality) TTS / \(voiceName)"
     }
 
     var visionStatusLabel: String {
@@ -469,7 +624,7 @@ final class CompanionAppModel {
 
         let source = selectedCategory == "Today"
             ? catalogItems
-            : catalogItems.filter { $0.category == selectedCategory }
+            : catalogItems.filter { catalogGroup(for: $0) == selectedCategory }
         return Array(source.prefix(6))
     }
 
@@ -483,7 +638,7 @@ final class CompanionAppModel {
                 .prefix(18)
                 .map { $0 }
         } else {
-            baseItems = catalogItems.filter { $0.category == selectedCategory }
+            baseItems = catalogItems.filter { catalogGroup(for: $0) == selectedCategory }
         }
 
         guard !trimmedQuery.isEmpty else { return baseItems }
@@ -491,8 +646,13 @@ final class CompanionAppModel {
         return baseItems.filter { item in
             item.title.lowercased().contains(trimmedQuery) ||
             item.subtitle.lowercased().contains(trimmedQuery) ||
+            item.category.lowercased().contains(trimmedQuery) ||
             item.summary.lowercased().contains(trimmedQuery) ||
-            item.section.lowercased().contains(trimmedQuery)
+            item.section.lowercased().contains(trimmedQuery) ||
+            item.status?.lowercased().contains(trimmedQuery) == true ||
+            item.source?.lowercased().contains(trimmedQuery) == true ||
+            item.machineFit?.lowercased().contains(trimmedQuery) == true ||
+            item.includes.contains(where: { $0.lowercased().contains(trimmedQuery) })
         }
     }
 
@@ -548,39 +708,59 @@ final class CompanionAppModel {
         switch category {
         case "Today":
             return "The fastest installs and the best lanes to start with."
-        case "Map Regions":
+        case "Map Regions", "Maps":
             return "Regional atlas packs built for real routes, city grids, and empty stretches in between."
+        case "Starter Stacks":
+            return "One-tap tier packs that seed a fresh RoachNet install with useful shelves fast."
         case "Medicine":
             return "Field guides, drug references, treatment steps, and deeper medical shelves."
-        case "Survival":
+        case "Survival", "Survival & Preparedness":
             return "Preparedness guides, winter planning, bug-out thinking, and field manuals."
-        case "Education":
+        case "Education", "Education & Reference":
             return "Course packs, study shelves, and open learning lanes that feel like a small campus."
-        case "DIY":
+        case "Science", "Science & Simulations":
+            return "Physics, chemistry, biology, earth science, and interactive lab shelves."
+        case "DIY", "DIY & Repair":
             return "Repair, woodworking, practical builds, and hands-on home/shop references."
-        case "Agriculture":
+        case "Maker", "Maker & Electronics":
+            return "Electronics, fabrication, hobby build docs, and tool-first learning lanes."
+        case "Agriculture", "Agriculture & Food":
             return "Food systems, gardening, homestead notes, and agricultural references."
-        case "Dev":
+        case "Homestead & Sustainability":
+            return "Practical self-reliance shelves for keeping the useful stuff close to the machine."
+        case "Games, Film & Pop Culture":
+            return "Game references, development Q&A, media rabbit holes, and backlog-adjacent shelves."
+        case "Dev", "Software Development":
             return "Programming docs, dev references, and coding shelves built to sit next to the editor."
-        case "ML":
+        case "ML", "Machine Learning & Data Science":
             return "Machine learning and AI references, model guides, and data science study packs."
-        case "Audio":
+        case "Platforms & Systems":
+            return "Operating-system notes, package-manager fixes, and platform docs for when the stack gets weird."
+        case "Audio", "Music Production & Audio":
             return "Music production, sound design, mixing, synthesis, and engineering references."
-        case "Infra":
+        case "Design & Visual Media":
+            return "Design, imaging, Blender, graphics, and visual references for the workbench."
+        case "Finance & Crypto":
+            return "Finance, markets, wallets, protocols, and practical money-system references."
+        case "Law, History & Society":
+            return "Civic, legal, history, and society shelves that stay readable without a login."
+        case "Language & Writing":
+            return "Writing, language, grammar, and text shelves for cleaner notes and drafts."
+        case "Kids & Family":
+            return "Lightweight family and kids learning shelves with fewer browser detours."
+        case "Infra", "IT & Infrastructure":
             return "Ops, networking, containers, servers, privacy, and infrastructure docs."
+        case "Security & Privacy":
+            return "Privacy, security, Tor, edge defense, and reverse-engineering reference."
         case "Wikipedia":
             return "Right-sized encyclopedia lanes for broad reference without opening a browser maze."
-        case "Models":
+        case "Models", "Model Packs":
             return "Model packs, local AI defaults, and RoachClaw expansion lanes."
-        case "Travel":
+        case "Travel", "Travel & Field Guides", "Travel, Mobility & Outdoors":
             return "Guides, route planning references, and location shelves that travel well."
-        case "Science":
-            return "Physics, chemistry, earth science, astronomy, and experiment-heavy references."
-        case "Maker":
-            return "Electronics, fabrication, hobby build docs, and tool-first learning lanes."
         case "Design":
             return "Typography, UI, visual design, and creative-tool learning/reference content."
-        case "Deep Library":
+        case "Deep Library", "Dictionaries & Primary Sources":
             return "Larger archives and heavier shelves for broad browsing when storage is not tight."
         default:
             return "Install-ready content that lands straight in the paired RoachNet desktop."
@@ -591,7 +771,7 @@ final class CompanionAppModel {
         if category == "Today" {
             return spotlightItems.count
         }
-        return catalogItems.filter { $0.category == category }.count
+        return catalogItems.filter { catalogGroup(for: $0) == category }.count
     }
 
     func isFavorite(_ item: StoreAppItem) -> Bool {
@@ -876,6 +1056,19 @@ final class CompanionAppModel {
         errorText = nil
     }
 
+    func refreshVoiceProfiles() {
+        availableVoiceProfiles = CompanionSpeechController.availableVoiceProfiles(localeIdentifier: speechLocaleIdentifier)
+        if selectedVoiceProfileID.isEmpty || !availableVoiceProfiles.contains(where: { $0.id == selectedVoiceProfileID }) {
+            selectedVoiceProfileID = availableVoiceProfiles.first?.id ?? ""
+        }
+    }
+
+    func selectVoiceProfile(_ profile: CompanionVoiceProfile) {
+        selectedVoiceProfileID = profile.id
+        bannerText = "Voice model set to \(profile.title)."
+        errorText = nil
+    }
+
     func toggleDraftDictation() async {
         if isDictatingDraft {
             speechController.stopTranscription()
@@ -883,10 +1076,10 @@ final class CompanionAppModel {
         }
 
         errorText = nil
-        bannerText = "Listening on-device."
+        bannerText = "Local speech is listening."
 
         do {
-            try await speechController.startTranscription { [weak self] transcript in
+            try await speechController.startTranscription(localeIdentifier: speechLocaleIdentifier) { [weak self] transcript in
                 self?.draft = transcript
             } onFinish: { [weak self] transcript in
                 self?.draft = transcript
@@ -911,8 +1104,8 @@ final class CompanionAppModel {
 
         errorText = nil
         speakingMessageID = message.id
-        bannerText = "Reading back the reply."
-        speechController.speak(message.content) { [weak self] finished in
+        bannerText = "Reading with \(selectedVoiceTitle)."
+        speechController.speak(message.content, voiceIdentifier: selectedVoiceProfile?.id) { [weak self] finished in
             Task { @MainActor in
                 guard let self else { return }
                 self.speakingMessageID = nil
@@ -1171,6 +1364,40 @@ final class CompanionAppModel {
         persistCache()
     }
 
+    func removeQueuedInstall(_ item: QueuedInstallItem) {
+        pendingInstallQueue.removeAll { $0.id == item.id }
+        CompanionPendingInstallStore.save(pendingInstallQueue)
+        bannerText = "\(item.title) left the queue."
+        errorText = nil
+        persistCache()
+    }
+
+    func clearPendingInstallQueue() {
+        guard !pendingInstallQueue.isEmpty else { return }
+        pendingInstallQueue = []
+        CompanionPendingInstallStore.save([])
+        bannerText = "Install queue cleared."
+        errorText = nil
+        persistCache()
+    }
+
+    func installDeepLink(for item: StoreAppItem) -> URL? {
+        guard let installIntent = item.installIntent else { return nil }
+
+        var components = URLComponents()
+        components.scheme = "roachnet"
+        components.host = "install-content"
+        components.queryItems = installIntent.values
+            .merging([
+                "id": item.id,
+                "title": item.title,
+                "category": catalogGroup(for: item),
+            ]) { current, _ in current }
+            .sorted { $0.key < $1.key }
+            .map { URLQueryItem(name: $0.key, value: $0.value) }
+        return components.url
+    }
+
     func clearConnection() {
         connection = CompanionConnectionSettings(
             baseURL: CompanionConnectionSettings.recommendedBaseURL,
@@ -1214,6 +1441,29 @@ final class CompanionAppModel {
         guard let iconAsset = item.iconAsset else { return nil }
         guard let catalogBase = URL(string: appsCatalogURL) else { return nil }
         return URL(string: iconAsset, relativeTo: catalogBase)
+    }
+
+    func catalogGroup(for item: StoreAppItem) -> String {
+        let section = item.section.trimmingCharacters(in: .whitespacesAndNewlines)
+        let category = item.category.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if section == "Map Picks" || section == "Map Regions" || category == "Maps" {
+            return "Maps"
+        }
+
+        if section == "Model Packs" || category == "Local AI" {
+            return "Model Packs"
+        }
+
+        if section == "Wikipedia" || category == "Wikipedia" {
+            return "Wikipedia"
+        }
+
+        if !section.isEmpty {
+            return section
+        }
+
+        return category.isEmpty ? "Apps" : category
     }
 
     func clearBanner() {
@@ -1264,7 +1514,7 @@ final class CompanionAppModel {
     }
 
     private var currentAppVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.4"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.5"
     }
 
     private func submitInstallIntent(title: String, intent: StoreInstallIntent, matchedItemID: String?) async {
@@ -1300,6 +1550,10 @@ final class CompanionAppModel {
     }
 
     private func queueInstall(_ title: String, intent: StoreInstallIntent) {
+        pendingInstallQueue.removeAll { queuedItem in
+            queuedItem.title == title || queuedItem.intent.values == intent.values
+        }
+
         let queued = QueuedInstallItem(
             id: "queued-\(UUID().uuidString.lowercased())",
             title: title,
@@ -1507,8 +1761,20 @@ final class CompanionAppModel {
             ?? itemID
             ?? "RoachNet app"
 
+        let metadataKeys: Set<String> = [
+            "id",
+            "title",
+            "name",
+            "detail",
+            "openTab",
+            "preview",
+            "category",
+            "section",
+            "source",
+            "size",
+        ]
         let intentValues = values.filter { key, _ in
-            !["title", "name", "detail", "openTab", "preview", "category"].contains(key)
+            !metadataKeys.contains(key)
         }
 
         guard let action = intentValues["action"], !action.isEmpty else {
@@ -1525,7 +1791,7 @@ final class CompanionAppModel {
         }
 
         if let matchedItem {
-            selectedCategory = matchedItem.category
+            selectedCategory = catalogGroup(for: matchedItem)
             selectedStoreItem = matchedItem
         } else {
             selectedStoreItem = nil

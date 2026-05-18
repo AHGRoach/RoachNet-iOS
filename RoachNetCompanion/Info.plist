@@ -17,9 +17,9 @@
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.4</string>
+  <string>0.1.5</string>
   <key>CFBundleVersion</key>
-  <string>3</string>
+  <string>4</string>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>
@@ -42,6 +42,12 @@
   </dict>
   <key>NSCameraUsageDescription</key>
   <string>RoachNetiOS uses the camera to scan RoachTail pairing QR codes from your Mac.</string>
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>RoachNetiOS uses Bluetooth only when you start the RoachAtlas GPS bridge, so your Mac can read a local foreground GPS packet.</string>
+  <key>NSBluetoothPeripheralUsageDescription</key>
+  <string>RoachNetiOS advertises a local RoachAtlas GPS packet over Bluetooth while the foreground bridge is running.</string>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>RoachNetiOS uses your location only while the foreground RoachAtlas GPS bridge is running for your paired Mac.</string>
   <key>NSLocalNetworkUsageDescription</key>
   <string>RoachNet iOS connects to your Mac companion runtime so you can keep using chats, vault data, and installs from your phone.</string>
   <key>NSMicrophoneUsageDescription</key>

@@ -53,6 +53,7 @@ struct ChatView: View {
                 }
                 .padding(.horizontal, isCompact ? 14 : 16)
                 .padding(.top, isCompact ? 8 : 12)
+                .padding(.bottom, 6)
             }
             .navigationBarHidden(true)
             .sheet(isPresented: Binding(
@@ -69,6 +70,9 @@ struct ChatView: View {
                     }
                     selectedPhotoItem = nil
                 }
+            }
+            .onAppear {
+                model.refreshVoiceProfiles()
             }
         }
     }
@@ -444,6 +448,8 @@ struct ChatView: View {
                     visionAttachmentPreview(attachment)
                 }
 
+                voiceControlStrip
+
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .bottom, spacing: 12) {
                         composerUtilityButtons
@@ -477,17 +483,6 @@ struct ChatView: View {
         let photoButtonLabel = photoButtonTitle
 
         return HStack(spacing: 10) {
-            Button {
-                Task { await model.toggleDraftDictation() }
-            } label: {
-                ComposerUtilityGlyph(
-                    title: model.isDictatingDraft ? "Stop" : "Voice",
-                    systemImage: model.isDictatingDraft ? "waveform.circle.fill" : "mic.circle.fill",
-                    accent: model.isDictatingDraft ? RoachTheme.secondary : RoachTheme.primary
-                )
-            }
-            .buttonStyle(.plain)
-
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                 ComposerUtilityGlyph(
                     title: photoButtonLabel == "Add image" ? "Image" : "Replace",
@@ -497,6 +492,155 @@ struct ChatView: View {
             }
             .buttonStyle(.plain)
         }
+    }
+
+    private var voiceControlStrip: some View {
+        HStack(spacing: 10) {
+            Button {
+                Task { await model.toggleDraftDictation() }
+            } label: {
+                ZStack {
+                    VoicePulseMark(isActive: model.isDictatingDraft)
+
+                    Image(systemName: model.isDictatingDraft ? "stop.fill" : "mic.fill")
+                        .font(.system(size: 14, weight: .black))
+                        .foregroundStyle(model.isDictatingDraft ? Color.black : Color.white)
+                        .frame(width: 36, height: 36)
+                        .background(
+                            Circle()
+                                .fill(model.isDictatingDraft ? RoachTheme.secondary : RoachTheme.primary)
+                                .shadow(
+                                    color: (model.isDictatingDraft ? RoachTheme.secondary : RoachTheme.primary).opacity(0.42),
+                                    radius: 16,
+                                    x: 0,
+                                    y: 8
+                                )
+                        )
+                }
+            }
+            .buttonStyle(RoachPressableButtonStyle(scale: 0.94))
+            .accessibilityLabel(model.isDictatingDraft ? "Stop local speech capture" : "Start local speech capture")
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 7) {
+                    Text(model.voiceEngineTitle)
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(RoachTheme.secondary)
+                        .textCase(.uppercase)
+
+                    if model.isDictatingDraft {
+                        VoiceMeter()
+                    }
+                }
+
+                Text(model.voiceEngineDetail)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RoachTheme.subduedText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.74)
+            }
+
+            Spacer(minLength: 6)
+
+            if let latestAssistantMessage {
+                Button {
+                    model.toggleSpeech(for: latestAssistantMessage)
+                } label: {
+                    Image(systemName: model.speakingMessageID == latestAssistantMessage.id ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(model.speakingMessageID == latestAssistantMessage.id ? Color.black : RoachTheme.tertiary)
+                        .frame(width: 34, height: 34)
+                        .background(
+                            Circle()
+                                .fill(model.speakingMessageID == latestAssistantMessage.id ? RoachTheme.secondary : RoachTheme.elevatedSurface)
+                                .overlay(
+                                    Circle()
+                                        .strokeBorder(RoachTheme.border, lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(RoachPressableButtonStyle(scale: 0.94))
+                .accessibilityLabel(model.speakingMessageID == latestAssistantMessage.id ? "Stop readback" : "Read latest reply")
+            }
+
+            Menu {
+                if model.availableVoiceProfiles.isEmpty {
+                    Text("No installed voices found")
+                } else {
+                    ForEach(Array(model.availableVoiceProfiles.prefix(24))) { profile in
+                        Button {
+                            model.selectVoiceProfile(profile)
+                        } label: {
+                            Label(
+                                "\(profile.title) · \(profile.subtitle)",
+                                systemImage: profile.id == model.selectedVoiceProfileID ? "checkmark.circle.fill" : "waveform"
+                            )
+                        }
+                    }
+                }
+
+                Divider()
+
+                Button {
+                    model.refreshVoiceProfiles()
+                } label: {
+                    Label("Refresh installed voices", systemImage: "arrow.clockwise")
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "slider.horizontal.2.square")
+                        .font(.caption.weight(.black))
+                    Text("Voice")
+                        .font(.caption.weight(.black))
+                }
+                .foregroundStyle(RoachTheme.text)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 9)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(RoachTheme.elevatedSurface.opacity(0.92))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(RoachTheme.border, lineWidth: 1)
+                        )
+                )
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            RoachTheme.elevatedSurface.opacity(0.96),
+                            RoachTheme.surface.opacity(0.90),
+                            Color.black.opacity(0.12),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [
+                                    RoachTheme.secondary.opacity(model.isDictatingDraft ? 0.56 : 0.24),
+                                    RoachTheme.primary.opacity(0.22),
+                                    RoachTheme.border,
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+        )
+        .animation(.spring(response: 0.28, dampingFraction: 0.78), value: model.isDictatingDraft)
+        .animation(.spring(response: 0.28, dampingFraction: 0.78), value: model.selectedVoiceProfileID)
     }
 
     private var composerField: some View {
@@ -652,6 +796,42 @@ struct ChatView: View {
         .accessibilityLabel(title)
     }
 
+}
+
+private struct VoicePulseMark: View {
+    let isActive: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !isActive)) { context in
+            let phase = context.date.timeIntervalSinceReferenceDate
+            let pulse = isActive ? CGFloat((sin(phase * 5.4) + 1) / 2) : 0
+
+            Circle()
+                .strokeBorder(RoachTheme.secondary.opacity(isActive ? 0.20 + (pulse * 0.34) : 0), lineWidth: 2)
+                .frame(width: 48 + (pulse * 8), height: 48 + (pulse * 8))
+                .blur(radius: isActive ? 0.2 : 0)
+        }
+        .frame(width: 52, height: 52)
+    }
+}
+
+private struct VoiceMeter: View {
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 18.0)) { context in
+            let phase = context.date.timeIntervalSinceReferenceDate
+
+            HStack(spacing: 3) {
+                ForEach(0..<4, id: \.self) { index in
+                    let height = 5 + CGFloat((sin(phase * 7.0 + Double(index) * 0.82) + 1) / 2) * 9
+                    Capsule(style: .continuous)
+                        .fill(RoachTheme.secondary)
+                        .frame(width: 3, height: height)
+                        .shadow(color: RoachTheme.secondary.opacity(0.35), radius: 5, x: 0, y: 0)
+                }
+            }
+        }
+        .frame(width: 24, height: 16)
+    }
 }
 
 private struct ComposerUtilityGlyph: View {

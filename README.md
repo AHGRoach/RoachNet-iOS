@@ -4,23 +4,25 @@ Phone lane for RoachClaw, vault reads, runtime control, and RoachNet Apps instal
 
 RoachNetiOS keeps the chat surface close, carries RoachTail pairing, and falls back to cached RoachBrain replies when the desktop or internet drops away.
 
-[RoachNet iOS page](https://roachnet.org/iOS/)<br>
-[IPA release](https://github.com/RoachWares/RoachNet-iOS/releases/latest/download/RoachNetiOS-v0.1.4-unsigned.ipa)<br>
-[SideStore source](https://raw.githubusercontent.com/RoachWares/RoachNet-SideStore/main/apps.json)<br>
-[SideStore notes](./docs/sidestore.md)
+[RoachNet iOS page](https://roachnet.org/ios/)<br>
+[IPA release](https://github.com/RoachWares/RoachNet-iOS/releases/latest/download/RoachNetiOS-v0.1.5-unsigned.ipa)<br>
+[SideStore / AltStore source](https://raw.githubusercontent.com/RoachWares/RoachNet-SideStore/main/apps.json)<br>
+[Sideload notes](./docs/sidestore.md)
 
 ## What It Does
 
 - Continues RoachClaw chats from the paired desktop lane
+- Captures local voice prompts and user-picked images for RoachClaw context
 - Reads cached vault and runtime state on the phone
 - Keeps an offline-capable RoachBrain fallback when the bridge is down
 - Shows runtime health, model state, downloads, and RoachTail status
-- Sends RoachNet Apps install intents back to the desktop runtime
+- Advertises a foreground-only RoachAtlas GPS packet over local BLE when you start it
+- Sends RoachNet Apps install intents back to the desktop runtime, and queues them while the Mac is away
 - Stays sideload-friendly and open-source friendly with no closed mobile SDKs
 
 ## Install
 
-Builds are shipped as unsigned IPAs for SideStore or AltStore, and the preferred install lane is now the RoachNet SideStore source.
+Builds are shipped as unsigned IPAs for SideStore or AltStore, and the preferred install lane is the shared RoachNet AltSource.
 
 ```bash
 ./scripts/build_unsigned_ipa.sh
@@ -28,12 +30,12 @@ Builds are shipped as unsigned IPAs for SideStore or AltStore, and the preferred
 
 Artifacts:
 
-- `dist/RoachNetiOS-v0.1.4-unsigned.ipa`
-- `dist/RoachNetiOS-v0.1.4-unsigned.ipa.sha256`
+- `dist/RoachNetiOS-v0.1.5-unsigned.ipa`
+- `dist/RoachNetiOS-v0.1.5-unsigned.ipa.sha256`
 
 Install flow:
 
-1. Add the RoachNet source in SideStore:
+1. Add the RoachNet source in SideStore or AltStore:
    `https://raw.githubusercontent.com/RoachWares/RoachNet-SideStore/main/apps.json`
 2. Install `RoachNetiOS` from the source, or fall back to the IPA if you want the direct file.
 3. Let SideStore or AltStore sign it with your Apple ID.
@@ -59,6 +61,15 @@ Device values:
 
 The same install intents used on `apps.roachnet.org` are forwarded through the companion lane into the desktop app.
 
+## RoachAtlas GPS Bridge
+
+The Runtime tab can advertise the iPhone as a local RoachAtlas GPS source for the native desktop receiver.
+
+- BLE service: `E4B29778-2F25-4C70-9B4A-0F9D1D481105`
+- GPS characteristic: `E4B29779-2F25-4C70-9B4A-0F9D1D481105`
+- Packet: compact JSON with `lat`, `lon`, `accuracy`, `speed`, `course`, `altitude`, `timestamp`, and `source`
+- Privacy posture: foreground only, explicit Start/Stop, local Bluetooth transport, no background location mode
+
 ## Build
 
 ```bash
@@ -81,4 +92,4 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
 - `scripts/`
   Xcode project generation and unsigned IPA packaging
 - `docs/`
-  SideStore notes and pairing guidance
+  SideStore, AltStore, and pairing guidance

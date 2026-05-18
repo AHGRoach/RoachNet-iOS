@@ -141,6 +141,49 @@ struct RoachBackdrop: View {
     }
 }
 
+struct RoachTopChromeScrim: View {
+    let accent: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            LinearGradient(
+                colors: [
+                    RoachTheme.background.opacity(0.98),
+                    RoachTheme.background.opacity(0.86),
+                    accent.opacity(0.10),
+                    Color.clear,
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: max(proxy.safeAreaInsets.top + 10, 64))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+struct RoachBottomChromeScrim: View {
+    let accent: Color
+
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color.clear,
+                RoachTheme.background.opacity(0.72),
+                RoachTheme.background.opacity(0.98),
+                accent.opacity(0.10),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea(edges: .bottom)
+        .allowsHitTesting(false)
+    }
+}
+
 private struct RoachGlassChrome: View {
     let accent: Color
     let cornerRadius: CGFloat
@@ -226,7 +269,7 @@ struct RoachPanel<Content: View>: View {
 
     var body: some View {
         content
-            .padding(16)
+            .padding(13)
             .background(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .fill(
@@ -295,7 +338,7 @@ struct RoachHeroPanel<Content: View>: View {
 
     var body: some View {
         content
-            .padding(18)
+            .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .fill(
@@ -420,8 +463,8 @@ struct RoachStatusPill: View {
                 .foregroundStyle(RoachTheme.text)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .background(
             Capsule(style: .continuous)
                 .fill(
@@ -491,76 +534,91 @@ struct RoachTabBarItem: Identifiable {
     var id: CompanionTab { tab }
 }
 
+enum RoachCompanionChrome {
+    static let tabBarAvoidance: CGFloat = 74
+    static let bottomContentClearance: CGFloat = 126
+}
+
 struct RoachFloatingTabBar: View {
     @Binding var selection: CompanionTab
     let items: [RoachTabBarItem]
+    @Namespace private var tabSelection
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 4) {
             ForEach(items) { item in
-                Button {
-                    selection = item.tab
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: item.systemImage)
-                            .font(.system(size: 14, weight: .semibold))
-                            .frame(width: 18, height: 18)
+                let isSelected = selection == item.tab
 
-                        Text(item.title)
-                            .font(.caption.weight(.bold))
-                            .lineLimit(1)
-                            .opacity(selection == item.tab ? 1 : 0.72)
-                    }
-                    .foregroundStyle(selection == item.tab ? Color.white : RoachTheme.subduedText)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 11)
-                    .background {
-                        Capsule(style: .continuous)
+                VStack(spacing: 2) {
+                    Image(systemName: item.systemImage)
+                        .font(.system(size: isSelected ? 14 : 13, weight: .black))
+                        .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.72))
+                        .frame(width: 18, height: 18)
+                        .symbolEffect(.bounce, value: isSelected)
+
+                    Text(item.title)
+                        .font(.system(size: 8.5, weight: .black, design: .rounded))
+                        .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.66))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.68)
+                        .shadow(color: Color.black.opacity(0.55), radius: 4, x: 0, y: 1)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
                             .fill(
-                                selection == item.tab
-                                    ? item.accent.opacity(0.22)
-                                    : RoachTheme.elevatedSurface.opacity(0.58)
+                                LinearGradient(
+                                    colors: [
+                                        item.accent.opacity(0.46),
+                                        item.accent.opacity(0.28),
+                                        RoachTheme.primary.opacity(0.20),
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
                             )
-                            .overlay {
-                                Capsule(style: .continuous)
-                                    .strokeBorder(
-                                        selection == item.tab
-                                            ? item.accent.opacity(0.42)
-                                            : Color.white.opacity(0.06),
-                                        lineWidth: 1
-                                    )
-                            }
-                            .overlay {
-                                Capsule(style: .continuous)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [
-                                                item.accent.opacity(selection == item.tab ? 0.22 : 0.04),
-                                                Color.clear,
-                                            ],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                            }
+                            .matchedGeometryEffect(id: "tabSelection", in: tabSelection)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                            )
+                            .shadow(color: item.accent.opacity(0.24), radius: 10, x: 0, y: 6)
                     }
                 }
-                .buttonStyle(.plain)
+                .overlay(alignment: .bottom) {
+                    Capsule(style: .continuous)
+                        .fill(isSelected ? Color.white.opacity(0.86) : Color.clear)
+                        .frame(width: 24, height: 2)
+                        .shadow(color: item.accent.opacity(isSelected ? 0.52 : 0), radius: 8, x: 0, y: 0)
+                }
+                .scaleEffect(isSelected ? 1.02 : 0.99)
+                .frame(minHeight: 36)
+                .contentShape(Capsule(style: .continuous))
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.78, blendDuration: 0.08)) {
+                        selection = item.tab
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(item.title)
+                .accessibilityAddTraits([.isButton])
+                .accessibilityAddTraits(selection == item.tab ? .isSelected : [])
             }
         }
-        .padding(8)
+        .padding(5)
         .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.black.opacity(0.84))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    RoachTheme.surface.opacity(0.90),
-                                    RoachTheme.elevatedSurface.opacity(0.86),
-                                    Color.black.opacity(0.08),
+                                    Color.white.opacity(0.08),
+                                    RoachTheme.surface.opacity(0.54),
+                                    Color.black.opacity(0.72),
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -568,25 +626,28 @@ struct RoachFloatingTabBar: View {
                         )
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [RoachTheme.glassHighlight, Color.clear, Color.clear],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .blendMode(.screen)
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(RoachTheme.secondary.opacity(0.18), lineWidth: 1)
                 )
-                .overlay(
-                    RoachGlassChrome(accent: RoachTheme.secondary, cornerRadius: 26)
-                )
-                .shadow(color: Color.black.opacity(0.26), radius: 28, x: 0, y: 16)
+                .shadow(color: Color.black.opacity(0.38), radius: 20, x: 0, y: 12)
+                .shadow(color: RoachTheme.primary.opacity(0.12), radius: 16, x: 0, y: 8)
         )
+        .animation(.spring(response: 0.34, dampingFraction: 0.8), value: selection)
+    }
+}
+
+struct RoachPressableButtonStyle: ButtonStyle {
+    var scale: CGFloat = 0.975
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .brightness(configuration.isPressed ? 0.04 : 0)
+            .animation(.spring(response: 0.22, dampingFraction: 0.74), value: configuration.isPressed)
     }
 }
 
@@ -613,8 +674,8 @@ struct RoachShellDock: View {
                 shellBadges
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(.ultraThinMaterial)
@@ -680,14 +741,14 @@ struct RoachShellDock: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                .frame(width: 50, height: 50)
+                .frame(width: 44, height: 44)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
                 )
 
             Image(systemName: "point.3.connected.trianglepath.dotted")
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(Color.white)
         }
     }
@@ -773,7 +834,7 @@ struct RoachSectionHeader: View {
                 .tracking(1.2)
 
             Text(title)
-                .font(.system(size: 24, weight: .black, design: .rounded))
+                .font(.system(size: 22, weight: .black, design: .rounded))
                 .foregroundStyle(RoachTheme.text)
                 .tracking(-0.4)
                 .lineLimit(2)
@@ -820,7 +881,7 @@ struct RoachMetricTile: View {
                 .lineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(RoachTheme.elevatedSurface.opacity(0.92))
@@ -887,7 +948,7 @@ struct RoachSignalTile: View {
                 .lineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(RoachTheme.elevatedSurface.opacity(0.9))

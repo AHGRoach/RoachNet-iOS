@@ -25,6 +25,10 @@ struct CompanionRootView: View {
         }
     }
 
+    private var bottomAvoidance: CGFloat {
+        model.selectedTab == .chat ? RoachCompanionChrome.tabBarAvoidance : 0
+    }
+
     var body: some View {
         ZStack {
             RoachBackdrop()
@@ -40,27 +44,28 @@ struct CompanionRootView: View {
             )
             .ignoresSafeArea()
 
-            TabView(selection: $model.selectedTab) {
-                ChatView(model: model)
-                    .tag(CompanionTab.chat)
-
-                VaultView(model: model)
-                    .tag(CompanionTab.vault)
-
-                AppsView(model: model)
-                    .tag(CompanionTab.apps)
-
-                RuntimeView(model: model)
-                    .tag(CompanionTab.runtime)
-            }
-            .toolbar(.hidden, for: .tabBar)
-            .safeAreaPadding(.bottom, 96)
+            selectedContent
+                .id(model.selectedTab)
+                .padding(.bottom, bottomAvoidance)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+                .animation(.spring(response: 0.36, dampingFraction: 0.86), value: model.selectedTab)
+        }
+        .overlay(alignment: .top) {
+            RoachTopChromeScrim(accent: shellAccent)
+        }
+        .overlay(alignment: .bottom) {
+            RoachBottomChromeScrim(accent: shellAccent)
+                .frame(height: 176)
+                .allowsHitTesting(false)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             RoachFloatingTabBar(selection: $model.selectedTab, items: tabItems)
                 .padding(.horizontal, 16)
-                .padding(.top, 6)
-                .padding(.bottom, 10)
+                .padding(.top, 2)
+                .padding(.bottom, 2)
         }
         .task {
             if
@@ -86,7 +91,22 @@ struct CompanionRootView: View {
         .onOpenURL { url in
             model.handleIncomingURL(url)
         }
+        .sensoryFeedback(.selection, trigger: model.selectedTab)
         .sensoryFeedback(.success, trigger: model.bannerText ?? "")
         .sensoryFeedback(.error, trigger: model.errorText ?? "")
+    }
+
+    @ViewBuilder
+    private var selectedContent: some View {
+        switch model.selectedTab {
+        case .chat:
+            ChatView(model: model)
+        case .vault:
+            VaultView(model: model)
+        case .apps:
+            AppsView(model: model)
+        case .runtime:
+            RuntimeView(model: model)
+        }
     }
 }
